@@ -56,6 +56,7 @@ lines = [
     "nginx['listen_https'] = false",
     "nginx['listen_port'] = 80",
     "nginx['real_ip_trusted_addresses'] = ['127.0.0.1/8', '10.0.2.0/24']",
+    "gitlab_rails['monitoring_whitelist'] = ['127.0.0.0/8', '::1/128', '10.0.2.0/24']",
     "nginx['real_ip_header'] = 'X-Forwarded-For'",
     "nginx['real_ip_recursive'] = 'on'",
     "nginx['proxy_set_headers'] = {",

@@ -15,6 +15,7 @@ systemctl --user try-restart gitlab.service
 
 if [[ "${RUNNER_ENABLED:-True}" == "True" ]] && systemctl --user is-active --quiet gitlab.service; then
     systemctl --user enable --now podman.socket
+    systemctl --user enable gitlab-runner.service gitlab-runner-register.service
     systemctl --user try-restart gitlab-runner.service
-    systemctl --user start --no-block gitlab-runner-register.service || true
+    systemctl --user restart --no-block gitlab-runner-register.service || true
 fi

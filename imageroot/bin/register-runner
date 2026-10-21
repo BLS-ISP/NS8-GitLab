@@ -52,19 +52,32 @@ if check_cfg.returncode == 0:
     print("GitLab Runner is already registered in config.toml.", file=sys.stderr)
     sys.exit(0)
 
-# Wait for gitlab-app web service to become ready (can take several minutes on first boot)
-readiness_url = f"http://127.0.0.1:{nginx_port}/-/readiness"
-print(f"Waiting for GitLab to finish initialization at {readiness_url} ...", file=sys.stderr)
+# Initialize a minimal config.toml if missing so gitlab-runner does not log stat errors while waiting
+run_cmd([
+    "podman", "exec", "gitlab-runner", "sh", "-c",
+    "test -f /etc/gitlab-runner/config.toml || printf 'concurrent = 1\\ncheck_interval = 0\\n' > /etc/gitlab-runner/config.toml"
+])
+
+# Wait for gitlab-app web service to become ready inside the pod (can take several minutes on first boot)
+print("Waiting for GitLab web service to finish initialization ...", file=sys.stderr)
 for attempt in range(90):
-    try:
-        with urllib.request.urlopen(readiness_url, timeout=5) as resp:
-            if resp.status == 200:
-                break
-    except Exception:
-        pass
+    probe_ready = run_cmd([
+        "podman", "exec", "gitlab-app",
+        "curl", "-fsS", "-o", "/dev/null",
+        "http://127.0.0.1:80/-/readiness",
+    ])
+    if probe_ready.returncode == 0:
+        break
+    probe_login = run_cmd([
+        "podman", "exec", "gitlab-app",
+        "curl", "-fsS", "-o", "/dev/null",
+        "http://127.0.0.1:80/users/sign_in",
+    ])
+    if probe_login.returncode == 0:
+        break
     time.sleep(10)
 else:
-    print("Timed out waiting for GitLab readiness endpoint.", file=sys.stderr)
+    print("Timed out waiting for GitLab web service.", file=sys.stderr)
     sys.exit(1)
 
 ruby_script = """
@@ -116,7 +129,6 @@ reg_cmd = [
     "--executor", "docker",
     "--docker-image", "docker.io/library/alpine:latest",
     "--docker-host", "unix:///var/run/docker.sock",
-    "--docker-network-mode", "slirp4netns:allow_host_loopback=true",
 ]
 reg_res = run_cmd(reg_cmd)
 if reg_res.returncode != 0:

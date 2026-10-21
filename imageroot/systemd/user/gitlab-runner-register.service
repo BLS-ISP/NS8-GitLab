@@ -5,12 +5,17 @@
 
 [Unit]
 Description=GitLab Runner Auto-Registration
+BindsTo=gitlab.service
 After=gitlab.service gitlab-app.service gitlab-runner.service
-Requires=gitlab-app.service gitlab-runner.service
+Wants=gitlab-app.service gitlab-runner.service
 
 [Service]
 Type=oneshot
+RemainAfterExit=yes
 EnvironmentFile=-%S/state/environment
 WorkingDirectory=%S/state
 TimeoutStartSec=1200
 ExecStart=/usr/local/bin/runagent ../bin/register-runner
+
+[Install]
+WantedBy=default.target
