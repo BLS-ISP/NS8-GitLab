@@ -1,0 +1,32 @@
+#!/usr/bin/env python3
+
+#
+# Copyright (C) 2024 Nethesis S.r.l.
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+
+import sys
+import json
+import os
+import agent
+import agent.tasks
+
+request = json.load(sys.stdin)
+renv = request.get("environment", {})
+
+host = renv.get("HOST") or os.environ.get("HOST", "")
+if host:
+    configure_retval = agent.tasks.run(
+        agent_id=os.environ["AGENT_ID"],
+        action="configure-module",
+        data={
+            "host": host,
+            "http2https": renv.get("HTTP2HTTPS", "True") == "True",
+            "lets_encrypt": renv.get("LETS_ENCRYPT", "False") == "True",
+            "ldap_domain": renv.get("LDAP_DOMAIN", ""),
+            "registry_host": renv.get("GITLAB_REGISTRY_HOST", ""),
+            "runner_enabled": renv.get("RUNNER_ENABLED", "True") == "True",
+            "password": "",
+        },
+    )
+    agent.assert_exp(configure_retval["exit_code"] == 0, "The configure-module subtask failed!")

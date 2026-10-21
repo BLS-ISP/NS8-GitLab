@@ -3,23 +3,21 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 
-#
-# This systemd unit starts a gitlab instance using Podman.
-# Most parts of this file come from podman-generate-systemd.
-#
 [Unit]
 Description=GitLab Pod
+Requires=gitlab-app.service
+Before=gitlab-app.service gitlab-runner.service
 
 [Service]
 Environment=PODMAN_SYSTEMD_UNIT=%n
-EnvironmentFile=%S/state/environment
+EnvironmentFile=-%S/state/environment
 WorkingDirectory=%S/state
 Restart=always
-TimeoutStopSec=70
+TimeoutStopSec=120
 ExecStartPre=/bin/rm -f %t/gitlab.pid %t/gitlab.pod-id
-ExecStartPre=/usr/bin/podman pod create --infra-conmon-pidfile %t/gitlab.pid --pod-id-file %t/gitlab.pod-id --name gitlab -p 127.0.0.1:${GITLAB_NGINX_PORT}:80 -p 127.0.0.1:${GITLAB_REGISTRY_PORT}:5050 --replace --network=slirp4netns:allow_host_loopback=true
+ExecStartPre=/usr/bin/podman pod create --infra-conmon-pidfile %t/gitlab.pid --pod-id-file %t/gitlab.pod-id --name gitlab --shm-size=512m -p 127.0.0.1:${GITLAB_NGINX_PORT}:80 -p 127.0.0.1:${GITLAB_REGISTRY_PORT}:5050 -p 0.0.0.0:${GITLAB_SSH_PORT}:22 --replace --network=slirp4netns:allow_host_loopback=true
 ExecStart=/usr/bin/podman pod start --pod-id-file %t/gitlab.pod-id
-ExecStop=/usr/bin/podman pod stop --ignore --pod-id-file %t/gitlab.pod-id -t 10
+ExecStop=/usr/bin/podman pod stop --ignore --pod-id-file %t/gitlab.pod-id -t 60
 ExecStopPost=/usr/bin/podman pod rm --ignore -f --pod-id-file %t/gitlab.pod-id
 PIDFile=%t/gitlab.pid
 Type=forking

@@ -3,20 +3,18 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 
-#
-# This systemd unit starts a gitlab instance using Podman.
-# Most parts of this file come from podman-generate-systemd.
-#
 [Unit]
 Description=GitLab Runner
 BindsTo=gitlab.service
-After=gitlab.service
+After=gitlab.service gitlab-app.service
+Wants=podman.socket gitlab-runner-register.service
 
 [Service]
 Environment=PODMAN_SYSTEMD_UNIT=%n
-EnvironmentFile=%S/state/environment
+EnvironmentFile=-%S/state/environment
 WorkingDirectory=%S/state
 Restart=always
+TimeoutStopSec=70
 ExecStartPre=/bin/rm -f %t/gitlab-runner.pid %t/gitlab-runner.ctr-id
 ExecStart=/usr/bin/podman run \
     --detach \
@@ -26,11 +24,12 @@ ExecStart=/usr/bin/podman run \
     --cgroups=no-conmon \
     --pod-id-file %t/gitlab.pod-id \
     --replace \
+    --security-opt label=disable \
     --volume gitlab-runner-config:/etc/gitlab-runner:Z \
     --volume gitlab-runner-machine-config:/root/.docker/machine:Z \
-    --volume ${XDG_RUNTIME_DIR}/podman/podman.sock:/var/run/docker.sock \
+    --volume %t/podman/podman.sock:/var/run/docker.sock \
     ${GITLAB_RUNNER_IMAGE}
-ExecStop=/usr/bin/podman stop --ignore --cidfile %t/gitlab-runner.ctr-id -t 10
+ExecStop=/usr/bin/podman stop --ignore --cidfile %t/gitlab-runner.ctr-id -t 30
 ExecStopPost=/usr/bin/podman rm --ignore -f --cidfile %t/gitlab-runner.ctr-id
 PIDFile=%t/gitlab-runner.pid
 Type=forking

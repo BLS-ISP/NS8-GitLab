@@ -5,16 +5,23 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 
-# If the control reaches this step, the service can be enabled and started
-
 set -e
 
 # Redirect any output to the journal (stderr)
 exec 1>&2
 
-# Enable podman socket for gitlab runner
-#systemctl --user enable --now podman.socket
-#systemctl --user restart podman.socket
+systemctl --user daemon-reload
 
-systemctl --user enable --now gitlab.service gitlab-app.service # gitlab-runner.service
-systemctl --user restart gitlab.service gitlab-app.service # gitlab-runner.service
+# Start or restart GitLab Pod and Server
+systemctl --user enable gitlab.service gitlab-app.service
+systemctl --user restart gitlab.service
+
+if [[ "${RUNNER_ENABLED:-True}" == "True" ]]; then
+    systemctl --user enable --now podman.socket
+    systemctl --user enable --now gitlab-runner.service
+    systemctl --user restart gitlab-runner.service
+    systemctl --user start --no-block gitlab-runner-register.service || true
+else
+    systemctl --user disable --now gitlab-runner-register.service 2>/dev/null || true
+    systemctl --user disable --now gitlab-runner.service 2>/dev/null || true
+fi

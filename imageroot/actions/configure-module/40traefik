@@ -13,41 +13,49 @@ import agent.tasks
 
 data = json.load(sys.stdin)
 
-# Setup variables
-host = os.environ.get('HOST')
-registry_url = os.environ.get('GITLAB_REGISTRY_HOST')
+host = os.environ.get("HOST", "")
+registry_url = os.environ.get("GITLAB_REGISTRY_HOST", "")
+lets_encrypt = os.environ.get("LETS_ENCRYPT", "False") == "True"
+http2https = os.environ.get("HTTP2HTTPS", "True") == "True"
 
-default_traefik_id = agent.resolve_agent_id('traefik@node')
+default_traefik_id = agent.resolve_agent_id("traefik@node")
 if default_traefik_id is None:
     sys.exit(2)
 
-# Configure traefik virtual host
+# Configure traefik virtual host for GitLab web UI
 response = agent.tasks.run(
     agent_id=default_traefik_id,
-    action='set-route',
+    action="set-route",
     data={
-        'instance': os.environ['MODULE_ID'],
-        'url': f'http://127.0.0.1:{os.environ["GITLAB_NGINX_PORT"]}',
-        'host': host,
-        'lets_encrypt': True,
-        'http2https': True
+        "instance": os.environ["MODULE_ID"],
+        "url": f'http://127.0.0.1:{os.environ["GITLAB_NGINX_PORT"]}',
+        "host": host,
+        "lets_encrypt": lets_encrypt,
+        "http2https": http2https,
     },
 )
-
-agent.assert_exp(response['exit_code'] == 0)
+agent.assert_exp(response["exit_code"] == 0)
 
 if registry_url:
-    # Configure traefik virtual host
+    # Configure traefik virtual host for GitLab Container Registry
     response = agent.tasks.run(
         agent_id=default_traefik_id,
-        action='set-route',
+        action="set-route",
         data={
-            'instance': os.environ['MODULE_ID']+'-registry',
-            'url': f'http://127.0.0.1:{os.environ["GITLAB_REGISTRY_PORT"]}',
-            'host': registry_url,
-            'lets_encrypt': True,
-            'http2https': True
+            "instance": os.environ["MODULE_ID"] + "-registry",
+            "url": f'http://127.0.0.1:{os.environ["GITLAB_REGISTRY_PORT"]}',
+            "host": registry_url,
+            "lets_encrypt": lets_encrypt,
+            "http2https": http2https,
         },
     )
-
-agent.assert_exp(response['exit_code'] == 0)
+    agent.assert_exp(response["exit_code"] == 0)
+else:
+    # Remove any previously configured registry route
+    agent.tasks.run(
+        agent_id=default_traefik_id,
+        action="delete-route",
+        data={
+            "instance": os.environ["MODULE_ID"] + "-registry",
+        },
+    )

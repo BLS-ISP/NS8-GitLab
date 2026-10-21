@@ -1,20 +1,21 @@
 {
-  "name": "gitlab",
+  "name": "GitLab",
+  "upstream_name": "GitLab CE 19.5.0",
   "description": {
-    "en": "GitLab for Nethserver 8",
-    "de": "GitLab für Nethserver 8"
+    "en": "Self-hosted GitLab Community Edition DevSecOps platform for Git repositories, CI/CD, and Container Registry",
+    "de": "Selbstgehostete GitLab Community Edition DevSecOps-Plattform für Git-Repositories, CI/CD und Container Registry"
   },
-  "categories": ["collaboration"],
+  "categories": ["development", "collaboration"],
   "authors": [
     {
-      "name": "Philip Falliano",
-      "email": "philip.falliano@phillopp.de"
+      "name": "BLS-ISP",
+      "email": "info@bls-isp.de"
     }
   ],
   "docs": {
-    "documentation_url": "https://github.com/phillopp/ns8-gitlab/wiki",
-    "bug_url": "https://github.com/phillopp/ns8-gitlab/issues",
-    "code_url": "https://github.com/phillopp/ns8-gitlab"
+    "documentation_url": "https://github.com/BLS-ISP/NS8-GitLab",
+    "bug_url": "https://github.com/BLS-ISP/NS8-GitLab/issues",
+    "code_url": "https://github.com/BLS-ISP/NS8-GitLab"
   },
-  "source": "ghcr.io/phillopp/gitlab"
+  "source": "ghcr.io/bls-isp/gitlab"
 }

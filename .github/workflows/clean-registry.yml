@@ -9,11 +9,11 @@ permissions:
 
 jobs:
   delete_images:
+    if: github.event.ref != 'repomd'
     name: "Delete ghcr.io images ${{ github.event.ref }}"
     runs-on: ubuntu-latest
-    environment: Registry
     steps:
       - uses: NethServer/ns8-github-actions/.github/actions/delete-image@v1
         with:
           images: "gitlab"
-          delete_image_token: ${{ secrets.IMAGES_CLEANUP_TOKEN }}
+          delete_image_token: ${{ secrets.GITHUB_TOKEN }}

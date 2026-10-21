@@ -1,0 +1,16 @@
+#
+# Copyright (C) 2024 Nethesis S.r.l.
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+
+[Unit]
+Description=GitLab Runner Auto-Registration
+After=gitlab.service gitlab-app.service gitlab-runner.service
+Requires=gitlab-app.service gitlab-runner.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=-%S/state/environment
+WorkingDirectory=%S/state
+TimeoutStartSec=1200
+ExecStart=/usr/local/bin/runagent ../bin/register-runner

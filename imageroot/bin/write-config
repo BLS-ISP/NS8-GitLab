@@ -1,0 +1,188 @@
+#!/usr/bin/env python3
+
+#
+# Copyright (C) 2024 Nethesis S.r.l.
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+
+import json
+import os
+import sys
+import agent
+from agent.ldapproxy import Ldapproxy
+
+
+def ruby_str(value):
+    """Return a safely escaped Ruby string expression using JSON.parse."""
+    return f"JSON.parse({json.dumps(json.dumps(str(value)))})"
+
+
+env = dict(os.environ)
+if os.path.exists("environment"):
+    try:
+        env.update(agent.read_envfile("environment"))
+    except Exception:
+        pass
+
+host = env.get("HOST", "gitlab.local")
+registry_url = env.get("GITLAB_REGISTRY_HOST", "")
+ldap_domain = env.get("LDAP_DOMAIN", "")
+ssh_port = env.get("GITLAB_SSH_PORT", "")
+initial_password = env.get("GITLAB_INITIAL_PASSWORD", "")
+
+smtp_settings = {}
+try:
+    rdb = agent.redis_connect(use_replica=True)
+    smtp_settings = agent.get_smarthost_settings(rdb) or {}
+except Exception as ex:
+    print(f"Warning: could not read smarthost settings from Redis: {ex}", file=sys.stderr)
+
+lines = [
+    "# Generated automatically by NethServer 8 GitLab module",
+    "require 'json'",
+    "",
+    "# Container runtime & resource tuning",
+    "package['detect_init'] = false",
+    "package['modify_kernel_parameters'] = false",
+    "node_exporter['enable'] = false",
+    "manage_accounts['enable'] = false",
+    "prometheus_monitoring['enable'] = false",
+    "postgresql['shared_buffers'] = '256MB'",
+    "puma['worker_processes'] = 2",
+    "sidekiq['concurrency'] = 10",
+    "",
+    "# External URL & Reverse Proxy (Traefik)",
+    f"external_url {ruby_str(f'https://{host}')}",
+    "nginx['listen_https'] = false",
+    "nginx['listen_port'] = 80",
+    "nginx['real_ip_trusted_addresses'] = ['127.0.0.1/8', '10.0.2.0/24']",
+    "nginx['real_ip_header'] = 'X-Forwarded-For'",
+    "nginx['real_ip_recursive'] = 'on'",
+    "nginx['proxy_set_headers'] = {",
+    "  'X-Forwarded-Proto' => 'https',",
+    "  'X-Forwarded-Ssl' => 'on'",
+    "}",
+]
+
+if ssh_port and ssh_port.isdigit():
+    lines.extend([
+        "",
+        "# Git over SSH Port",
+        f"gitlab_rails['gitlab_shell_ssh_port'] = {int(ssh_port)}",
+    ])
+
+if initial_password and len(initial_password) >= 8:
+    lines.extend([
+        "",
+        "# Initial Root Password",
+        f"gitlab_rails['initial_root_password'] = {ruby_str(initial_password)}",
+    ])
+
+if registry_url:
+    lines.extend([
+        "",
+        "# GitLab Container Registry",
+        f"registry_external_url {ruby_str(f'https://{registry_url}')}",
+        "gitlab_rails['registry_enabled'] = true",
+        "registry_nginx['listen_https'] = false",
+        "registry_nginx['listen_port'] = 5050",
+        "registry_nginx['proxy_set_headers'] = {",
+        "  'Host' => '$http_host',",
+        "  'X-Real-IP' => '$remote_addr',",
+        "  'X-Forwarded-For' => '$proxy_add_x_forwarded_for',",
+        "  'X-Forwarded-Proto' => 'https',",
+        "  'X-Forwarded-Ssl' => 'on'",
+        "}",
+    ])
+else:
+    lines.extend([
+        "",
+        "# GitLab Container Registry (disabled)",
+        "gitlab_rails['registry_enabled'] = false",
+        "registry['enable'] = false",
+    ])
+
+if ldap_domain:
+    try:
+        odom = Ldapproxy().get_domain(ldap_domain)
+        if odom and "host" in odom and "port" in odom:
+            is_ad = odom.get("schema") == "ad"
+            uid_attr = "sAMAccountName" if is_ad else "uid"
+            ldap_servers = {
+                "main": {
+                    "label": f"LDAP ({ldap_domain})",
+                    "host": "10.0.2.2",
+                    "port": int(odom["port"]),
+                    "uid": uid_attr,
+                    "bind_dn": odom.get("bind_dn", ""),
+                    "password": odom.get("bind_password", ""),
+                    "encryption": "plain",
+                    "verify_certificates": False,
+                    "active_directory": is_ad,
+                    "allow_username_or_email_login": True,
+                    "lowercase_usernames": False,
+                    "block_auto_created_users": False,
+                    "base": odom.get("base_dn", ""),
+                }
+            }
+            lines.extend([
+                "",
+                "# LDAP / Active Directory Authentication",
+                "gitlab_rails['ldap_enabled'] = true",
+                "gitlab_rails['prevent_ldap_sign_in'] = false",
+                f"gitlab_rails['ldap_servers'] = JSON.parse({json.dumps(json.dumps(ldap_servers))})",
+            ])
+        else:
+            print(f"Warning: LDAP domain '{ldap_domain}' not currently available in Ldapproxy", file=sys.stderr)
+    except Exception as ex:
+        print(f"Warning: failed to load LDAP domain '{ldap_domain}': {ex}", file=sys.stderr)
+else:
+    lines.extend([
+        "",
+        "gitlab_rails['ldap_enabled'] = false",
+    ])
+
+if smtp_settings.get("enabled"):
+    smtp_host = smtp_settings.get("host", "")
+    if smtp_host in ("127.0.0.1", "localhost"):
+        smtp_host = "10.0.2.2"
+    smtp_port = int(smtp_settings.get("port") or 25)
+    smtp_user = smtp_settings.get("username", "")
+    smtp_pass = smtp_settings.get("password", "")
+    encrypt_smtp = str(smtp_settings.get("encrypt_smtp", "none")).lower()
+    tls_verify = bool(smtp_settings.get("tls_verify", False))
+
+    smtp_tls = encrypt_smtp in ("tls", "ssl") or smtp_port == 465
+    smtp_starttls = encrypt_smtp == "starttls" and not smtp_tls
+    verify_mode = "peer" if tls_verify else "none"
+
+    lines.extend([
+        "",
+        "# Smarthost / SMTP Configuration",
+        "gitlab_rails['smtp_enable'] = true",
+        f"gitlab_rails['smtp_address'] = {ruby_str(smtp_host)}",
+        f"gitlab_rails['smtp_port'] = {smtp_port}",
+        f"gitlab_rails['gitlab_email_from'] = {ruby_str(f'gitlab@{host}')}",
+        f"gitlab_rails['smtp_tls'] = {'true' if smtp_tls else 'false'}",
+        f"gitlab_rails['smtp_enable_starttls_auto'] = {'true' if smtp_starttls else 'false'}",
+        f"gitlab_rails['smtp_openssl_verify_mode'] = {ruby_str(verify_mode)}",
+    ])
+    if smtp_user:
+        lines.extend([
+            f"gitlab_rails['smtp_user_name'] = {ruby_str(smtp_user)}",
+            f"gitlab_rails['smtp_password'] = {ruby_str(smtp_pass)}",
+            "gitlab_rails['smtp_authentication'] = 'login'",
+        ])
+else:
+    lines.extend([
+        "",
+        "gitlab_rails['smtp_enable'] = false",
+    ])
+
+file_path = "gitlab.rb"
+tmpfile = f".gitlab.rb-{os.getpid()}.tmp"
+with open(tmpfile, "w", encoding="utf-8", newline="\n") as ofile:
+    for line in lines:
+        ofile.write(f"{line}\n")
+os.chmod(tmpfile, 0o600)
+os.replace(tmpfile, file_path)

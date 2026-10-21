@@ -12,10 +12,25 @@
     <cv-row v-if="error.getConfiguration">
       <cv-column>
         <NsInlineNotification
-            kind="error"
-            :title="$t('action.get-configuration')"
-            :description="error.getConfiguration"
-            :showCloseButton="false"
+          kind="error"
+          :title="$t('action.get-configuration')"
+          :description="error.getConfiguration"
+          :showCloseButton="false"
+        />
+      </cv-column>
+    </cv-row>
+    <cv-row v-if="ssh_port">
+      <cv-column>
+        <NsInlineNotification
+          kind="info"
+          :title="$t('settings.ssh_port_title')"
+          :description="
+            $t('settings.ssh_port_description', {
+              port: ssh_port,
+              host: host || 'git.example.org',
+            })
+          "
+          :showCloseButton="false"
         />
       </cv-column>
     </cv-row>
@@ -23,36 +38,68 @@
       <cv-column>
         <cv-tile light>
           <cv-form @submit.prevent="configureModule">
-            <!-- TODO remove test field and code configuration fields -->
             <cv-text-input
-                :label="$t('settings.host')"
-                v-model="host"
-                placeholder="git.example.org"
-                :disabled="loading.getConfiguration || loading.configureModule"
-                :invalid-message="error.host"
-                ref="host"
+              :label="$t('settings.host')"
+              v-model.trim="host"
+              placeholder="git.example.org"
+              :disabled="loading.getConfiguration || loading.configureModule"
+              :invalid-message="error.host"
+              ref="host"
             ></cv-text-input>
+            <NsToggle
+              :label="$t('settings.lets_encrypt')"
+              value="lets_encrypt"
+              :form-item="true"
+              v-model="lets_encrypt"
+              :disabled="loading.getConfiguration || loading.configureModule"
+              ref="lets_encrypt"
+            >
+              <template slot="text-left">{{
+                $t("settings.disabled")
+              }}</template>
+              <template slot="text-right">{{
+                $t("settings.enabled")
+              }}</template>
+            </NsToggle>
+            <NsToggle
+              :label="$t('settings.http2https')"
+              value="http2https"
+              :form-item="true"
+              v-model="http2https"
+              :disabled="loading.getConfiguration || loading.configureModule"
+              ref="http2https"
+            >
+              <template slot="text-left">{{
+                $t("settings.disabled")
+              }}</template>
+              <template slot="text-right">{{
+                $t("settings.enabled")
+              }}</template>
+            </NsToggle>
             <cv-text-input
-                :label="$t('settings.password')"
-                v-model="password"
-                :disabled="loading.getConfiguration || loading.configureModule"
-                :invalid-message="error.password"
-                ref="password"
+              :label="$t('settings.password')"
+              type="password"
+              v-model.trim="password"
+              :helper-text="$t('settings.password_helper')"
+              :disabled="loading.getConfiguration || loading.configureModule"
+              :invalid-message="error.password"
+              ref="password"
             ></cv-text-input>
             <NsComboBox
-                v-model.trim="ldap_domain"
-                :autoFilter="true"
-                :autoHighlight="true"
-                :title="$t('settings.ldap_domain')"
-                :label="$t('settings.choose_ldap_domain')"
-                :options="ldap_domain_list"
-                :acceptUserInput="false"
-                :showItemType="true"
-                :invalid-message="$t(error.ldap_domain)"
-                :disabled="loading.getConfiguration || loading.configureModule"
-                tooltipAlignment="start"
-                tooltipDirection="top"
-                ref="ldap_domain"
+              v-model.trim="ldap_domain"
+              :autoFilter="true"
+              :autoHighlight="true"
+              :title="$t('settings.ldap_domain')"
+              :label="$t('settings.choose_ldap_domain')"
+              :options="ldap_domain_list"
+              :clearFilterLabel="$t('settings.clear_selection')"
+              :acceptUserInput="false"
+              :showItemType="true"
+              :invalid-message="error.ldap_domain"
+              :disabled="loading.getConfiguration || loading.configureModule"
+              tooltipAlignment="start"
+              tooltipDirection="top"
+              ref="ldap_domain"
             >
               <template slot="tooltip">
                 {{
@@ -61,30 +108,45 @@
               </template>
             </NsComboBox>
             <cv-text-input
-                :label="$t('settings.registry_host')"
-                v-model="registryHost"
-                placeholder="registry.example.org"
-                :disabled="loading.getConfiguration || loading.configureModule"
-                :invalid-message="error.registryHost"
-                ref="registryHost"
+              :label="$t('settings.registry_host')"
+              v-model.trim="registry_host"
+              placeholder="registry.example.org"
+              :helper-text="$t('settings.registry_host_helper')"
+              :disabled="loading.getConfiguration || loading.configureModule"
+              :invalid-message="error.registry_host"
+              ref="registry_host"
             ></cv-text-input>
+            <NsToggle
+              :label="$t('settings.runner_enabled')"
+              value="runner_enabled"
+              :form-item="true"
+              v-model="runner_enabled"
+              :disabled="loading.getConfiguration || loading.configureModule"
+              ref="runner_enabled"
+            >
+              <template slot="text-left">{{
+                $t("settings.disabled")
+              }}</template>
+              <template slot="text-right">{{
+                $t("settings.enabled")
+              }}</template>
+            </NsToggle>
             <cv-row v-if="error.configureModule">
               <cv-column>
                 <NsInlineNotification
-                    kind="error"
-                    :title="$t('action.configure-module')"
-                    :description="error.configureModule"
-                    :showCloseButton="false"
+                  kind="error"
+                  :title="$t('action.configure-module')"
+                  :description="error.configureModule"
+                  :showCloseButton="false"
                 />
               </cv-column>
             </cv-row>
             <NsButton
-                kind="primary"
-                :icon="Save20"
-                :loading="loading.configureModule"
-                :disabled="loading.getConfiguration || loading.configureModule"
-            >{{ $t("settings.save") }}
-            </NsButton
+              kind="primary"
+              :icon="Save20"
+              :loading="loading.configureModule"
+              :disabled="loading.getConfiguration || loading.configureModule"
+              >{{ $t("settings.save") }}</NsButton
             >
           </cv-form>
         </cv-tile>
@@ -123,10 +185,14 @@ export default {
       },
       urlCheckInterval: null,
       host: "",
+      lets_encrypt: false,
+      http2https: true,
       password: "",
       ldap_domain: "",
       ldap_domain_list: [],
-      registryHost: "",
+      registry_host: "",
+      runner_enabled: true,
+      ssh_port: "",
       loading: {
         getConfiguration: false,
         configureModule: false,
@@ -135,11 +201,13 @@ export default {
         getConfiguration: "",
         configureModule: "",
         host: "",
+        lets_encrypt: "",
+        http2https: "",
         password: "",
         ldap_domain: "",
         ldap_domain_list: "",
-        registryHost: "",
-        runner_token: "",
+        registry_host: "",
+        runner_enabled: "",
       },
     };
   },
@@ -206,35 +274,79 @@ export default {
       this.loading.getConfiguration = false;
       const config = taskResult.output;
 
-      // TODO set configuration fields
-      // ...
+      this.host = config.host || "";
+      this.lets_encrypt = Boolean(config.lets_encrypt);
+      this.http2https =
+        config.http2https !== undefined ? Boolean(config.http2https) : true;
+      this.password = "";
+      this.ldap_domain = config.ldap_domain || "";
+      const domains = Array.isArray(config.ldap_domain_list)
+        ? config.ldap_domain_list
+        : [];
+      this.ldap_domain_list = [
+        {
+          name: "none",
+          label: this.$t("settings.no_ldap_domain"),
+          value: "",
+        },
+        ...domains,
+      ];
+      this.registry_host = config.registry_host || "";
+      this.runner_enabled =
+        config.runner_enabled !== undefined
+          ? Boolean(config.runner_enabled)
+          : true;
+      this.ssh_port = config.ssh_port || "";
 
-      // TODO remove
-      console.log("config", config);
-
-      this.host = config.host;
-      this.password = config.password;
-      this.ldap_domain = config.ldap_domain;
-      this.ldap_domain_list = config.ldap_domain_list;
-      this.registryHost = config.registry_host;
-
-      // TODO focus first configuration field
       this.focusElement("host");
     },
     validateConfigureModule() {
       this.clearErrors(this);
       let isValidationOk = true;
 
-      // TODO remove host and validate configuration fields
       if (!this.host) {
-        // test field cannot be empty
         this.error.host = this.$t("common.required");
-
+        if (isValidationOk) {
+          this.focusElement("host");
+          isValidationOk = false;
+        }
+      } else if (!this.host.includes(".")) {
+        this.error.host = this.$t("settings.invalid_fqdn");
         if (isValidationOk) {
           this.focusElement("host");
           isValidationOk = false;
         }
       }
+
+      if (this.password && this.password.length < 8) {
+        this.error.password = this.$t("settings.password_too_short");
+        if (isValidationOk) {
+          this.focusElement("password");
+          isValidationOk = false;
+        }
+      }
+
+      if (this.registry_host) {
+        if (!this.registry_host.includes(".")) {
+          this.error.registry_host = this.$t("settings.invalid_fqdn");
+          if (isValidationOk) {
+            this.focusElement("registry_host");
+            isValidationOk = false;
+          }
+        } else if (
+          this.host &&
+          this.registry_host.toLowerCase() === this.host.toLowerCase()
+        ) {
+          this.error.registry_host = this.$t(
+            "settings.registry_host_must_differ_from_host"
+          );
+          if (isValidationOk) {
+            this.focusElement("registry_host");
+            isValidationOk = false;
+          }
+        }
+      }
+
       return isValidationOk;
     },
     configureModuleValidationFailed(validationErrors) {
@@ -242,8 +354,6 @@ export default {
 
       for (const validationError of validationErrors) {
         const param = validationError.parameter;
-
-        // set i18n error message
         this.error[param] = this.$t("settings." + validationError.error);
       }
     },
@@ -280,12 +390,12 @@ export default {
           action: taskAction,
           data: {
             host: this.host,
-            http2https: true,
-            lets_encrypt: true,
-            password: this.password,
-            ldap_domain: this.ldap_domain,
-            registry_host: this.registryHost
-            // TODO configuration fields
+            http2https: this.http2https,
+            lets_encrypt: this.lets_encrypt,
+            password: this.password || "",
+            ldap_domain: this.ldap_domain || "",
+            registry_host: this.registry_host || "",
+            runner_enabled: this.runner_enabled,
           },
           extra: {
             title: this.$t("settings.configure_instance", {
@@ -296,7 +406,6 @@ export default {
           },
         })
       );
-      console.log(res);
       const err = res[0];
 
       if (err) {

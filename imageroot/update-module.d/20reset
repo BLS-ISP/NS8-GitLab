@@ -5,11 +5,16 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 
-# If the control reaches this step, the service can be enabled and started
-
 set -e
 
 # Redirect any output to the journal (stderr)
 exec 1>&2
 
-systemctl --user try-restart faktura-redesign.service
+systemctl --user daemon-reload
+systemctl --user try-restart gitlab.service
+
+if [[ "${RUNNER_ENABLED:-True}" == "True" ]] && systemctl --user is-active --quiet gitlab.service; then
+    systemctl --user enable --now podman.socket
+    systemctl --user try-restart gitlab-runner.service
+    systemctl --user start --no-block gitlab-runner-register.service || true
+fi

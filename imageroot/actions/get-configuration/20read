@@ -7,28 +7,43 @@
 
 import json
 import sys
-import agent
 import os
+import agent
 from agent.ldapproxy import Ldapproxy
 
 config = {}
 
-env = f'module/{os.environ["MODULE_ID"]}/environment'
-rdb = agent.redis_connect()
-config["host"] =  rdb.hget(env, "HOST")
-config["lets_encrypt"] =  rdb.hget(env, "LETS_ENCRYPT") == "True"
+env = dict(os.environ)
+if os.path.exists("environment"):
+    try:
+        env.update(agent.read_envfile("environment"))
+    except Exception:
+        pass
 
-lp = Ldapproxy()
+tcp_ports = [p.strip() for p in env.get("TCP_PORTS", "").split(",") if p.strip()]
+ssh_port = env.get("GITLAB_SSH_PORT") or (tcp_ports[2] if len(tcp_ports) >= 3 else "")
+
+config["host"] = env.get("HOST", "")
+config["http2https"] = env.get("HTTP2HTTPS", "True") == "True"
+config["lets_encrypt"] = env.get("LETS_ENCRYPT", "False") == "True"
+config["ldap_domain"] = env.get("LDAP_DOMAIN", "")
+config["registry_host"] = env.get("GITLAB_REGISTRY_HOST", "")
+config["runner_enabled"] = env.get("RUNNER_ENABLED", "True") == "True"
+config["ssh_port"] = ssh_port
+config["configured"] = bool(config["host"])
+
 domains = []
-for key in lp.get_domains_list():
-    domains.append({
-        "name": key,
-        "label": key,
-        "value": key,
-    })
+try:
+    lp = Ldapproxy()
+    for key in lp.get_domains_list():
+        domains.append({
+            "name": key,
+            "label": key,
+            "value": key,
+        })
+except Exception:
+    pass
 
-config['ldap_domain_list'] = domains
-config['ldap_domain'] = rdb.hget(env, "LDAP_DOMAIN")
-config['registry_host'] = rdb.hget(env, "GITLAB_REGISTRY_HOST")
+config["ldap_domain_list"] = domains
 
 json.dump(config, fp=sys.stdout)

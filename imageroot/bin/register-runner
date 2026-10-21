@@ -1,0 +1,126 @@
+#!/usr/bin/env python3
+
+#
+# Copyright (C) 2024 Nethesis S.r.l.
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+
+import json
+import os
+import subprocess
+import sys
+import time
+import urllib.request
+import agent
+
+
+def run_cmd(cmd, check=False):
+    return subprocess.run(cmd, capture_output=True, text=True, check=check)
+
+
+env = dict(os.environ)
+if os.path.exists("environment"):
+    try:
+        env.update(agent.read_envfile("environment"))
+    except Exception:
+        pass
+
+runner_enabled = env.get("RUNNER_ENABLED", "True") == "True"
+if not runner_enabled:
+    print("GitLab Runner is disabled, skipping registration.", file=sys.stderr)
+    sys.exit(0)
+
+host = env.get("HOST", "")
+nginx_port = env.get("GITLAB_NGINX_PORT", "")
+if not host or not nginx_port:
+    print("Module not yet configured (missing HOST or GITLAB_NGINX_PORT).", file=sys.stderr)
+    sys.exit(0)
+
+# Wait for gitlab-runner container to be running
+for _ in range(30):
+    res = run_cmd(["podman", "inspect", "-f", "{{.State.Running}}", "gitlab-runner"])
+    if res.returncode == 0 and res.stdout.strip() == "true":
+        break
+    time.sleep(2)
+else:
+    print("gitlab-runner container is not running.", file=sys.stderr)
+    sys.exit(1)
+
+# Check if runner is already registered in /etc/gitlab-runner/config.toml
+check_cfg = run_cmd(["podman", "exec", "gitlab-runner", "sh", "-c", "grep -q '\\[\\[runners\\]\\]' /etc/gitlab-runner/config.toml 2>/dev/null"])
+if check_cfg.returncode == 0:
+    print("GitLab Runner is already registered in config.toml.", file=sys.stderr)
+    sys.exit(0)
+
+# Wait for gitlab-app web service to become ready (can take several minutes on first boot)
+readiness_url = f"http://127.0.0.1:{nginx_port}/-/readiness"
+print(f"Waiting for GitLab to finish initialization at {readiness_url} ...", file=sys.stderr)
+for attempt in range(90):
+    try:
+        with urllib.request.urlopen(readiness_url, timeout=5) as resp:
+            if resp.status == 200:
+                break
+    except Exception:
+        pass
+    time.sleep(10)
+else:
+    print("Timed out waiting for GitLab readiness endpoint.", file=sys.stderr)
+    sys.exit(1)
+
+ruby_script = """
+user = User.admins.first
+if user.nil?
+  puts "ERR:No admin user found"
+  exit 1
+end
+res = Ci::Runners::CreateRunnerService.new(
+  user: user,
+  params: {
+    runner_type: 'instance_type',
+    description: 'NS8 Podman Runner',
+    run_untagged: true
+  }
+).execute
+if res.success?
+  puts "RUNNER_TOKEN=#{res.payload[:runner].token}"
+else
+  puts "ERR:#{res.message}"
+  exit 1
+end
+"""
+
+print("Creating runner authentication token via gitlab-rails runner...", file=sys.stderr)
+rails_res = run_cmd(["podman", "exec", "gitlab-app", "gitlab-rails", "runner", "-e", "production", ruby_script])
+if rails_res.returncode != 0:
+    print(f"gitlab-rails runner failed: {rails_res.stderr}\n{rails_res.stdout}", file=sys.stderr)
+    sys.exit(1)
+
+token = None
+for line in rails_res.stdout.splitlines():
+    if line.startswith("RUNNER_TOKEN="):
+        token = line.partition("=")[2].strip()
+        break
+
+if not token:
+    print(f"Failed to obtain runner token from output: {rails_res.stdout}", file=sys.stderr)
+    sys.exit(1)
+
+print("Registering gitlab-runner with GitLab instance...", file=sys.stderr)
+reg_cmd = [
+    "podman", "exec", "gitlab-runner",
+    "gitlab-runner", "register",
+    "--non-interactive",
+    "--url", "http://127.0.0.1:80",
+    "--clone-url", f"https://{host}",
+    "--token", token,
+    "--executor", "docker",
+    "--docker-image", "docker.io/library/alpine:latest",
+    "--docker-host", "unix:///var/run/docker.sock",
+    "--docker-network-mode", "slirp4netns:allow_host_loopback=true",
+]
+reg_res = run_cmd(reg_cmd)
+if reg_res.returncode != 0:
+    print(f"gitlab-runner register failed: {reg_res.stderr}\n{reg_res.stdout}", file=sys.stderr)
+    sys.exit(1)
+
+print("GitLab Runner registered successfully.", file=sys.stderr)

@@ -3,10 +3,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 
-#
-# This systemd unit starts a gitlab instance using Podman.
-# Most parts of this file come from podman-generate-systemd.
-#
 [Unit]
 Description=GitLab Server
 BindsTo=gitlab.service
@@ -14,10 +10,13 @@ After=gitlab.service
 
 [Service]
 Environment=PODMAN_SYSTEMD_UNIT=%n
-EnvironmentFile=%S/state/environment
+EnvironmentFile=-%S/state/environment
 WorkingDirectory=%S/state
 Restart=always
+TimeoutStartSec=600
+TimeoutStopSec=120
 ExecStartPre=/bin/rm -f %t/gitlab-app.pid %t/gitlab-app.ctr-id
+ExecStartPre=/usr/local/bin/runagent ../bin/write-config
 ExecStart=/usr/bin/podman run \
     --detach \
     --name gitlab-app \
@@ -26,13 +25,14 @@ ExecStart=/usr/bin/podman run \
     --cgroups=no-conmon \
     --pod-id-file %t/gitlab.pod-id \
     --replace \
-    --shm-size 256m \
-    --volume %S/state/gitlab.rb:/etc/gitlab/gitlab.rb:ro,Z \
+    --env GITLAB_ROOT_PASSWORD=${GITLAB_INITIAL_PASSWORD} \
+    --env GITLAB_PRE_RECONFIGURE_SCRIPT="cp -f /assets/ns8-gitlab.rb /etc/gitlab/gitlab.rb && chmod 0600 /etc/gitlab/gitlab.rb" \
+    --volume %S/state/gitlab.rb:/assets/ns8-gitlab.rb:ro,Z \
     --volume gitlab-config:/etc/gitlab:Z \
     --volume gitlab-data:/var/opt/gitlab:Z \
     --volume gitlab-logs:/var/log/gitlab:Z \
     ${GITLAB_CE_IMAGE}
-ExecStop=/usr/bin/podman stop --ignore --cidfile %t/gitlab-app.ctr-id -t 10
+ExecStop=/usr/bin/podman stop --ignore --cidfile %t/gitlab-app.ctr-id -t 90
 ExecStopPost=/usr/bin/podman rm --ignore -f --cidfile %t/gitlab-app.ctr-id
 PIDFile=%t/gitlab-app.pid
 Type=forking

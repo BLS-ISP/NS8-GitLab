@@ -11,7 +11,7 @@ set -e
 # Prepare variables for later use
 images=()
 # The image will be pushed to GitHub container registry
-repobase="${REPOBASE:-ghcr.io/phillopp}"
+repobase="${REPOBASE:-ghcr.io/bls-isp}"
 # Configure the image name
 reponame="gitlab"
 
@@ -34,15 +34,16 @@ buildah run \
 # Add imageroot directory to the container image
 buildah add "${container}" imageroot /imageroot
 buildah add "${container}" ui/dist /ui
-# Setup the entrypoint, ask to reserve one TCP port with the label and set a rootless container
+# Setup the entrypoint, ask to reserve three TCP ports with the label and set a rootless container
 buildah config --entrypoint=/ \
     --label="org.nethserver.authorizations=traefik@any:routeadm cluster:accountconsumer node:fwadm" \
-    --label="org.nethserver.tcp-ports-demand=2" \
+    --label="org.nethserver.tcp-ports-demand=3" \
     --label="org.nethserver.rootfull=0" \
-    --label="org.nethserver.images=docker.io/gitlab/gitlab-ce:19.4.2-ce.0 docker.io/gitlab/gitlab-runner:v19.4.1" \
+    --label="org.nethserver.images=docker.io/gitlab/gitlab-ce:19.5.0-ce.0 docker.io/gitlab/gitlab-runner:v19.5.0" \
     "${container}"
 # Commit the image
 buildah commit "${container}" "${repobase}/${reponame}"
+buildah rm "${container}"
 
 # Append the image URL to the images array
 images+=("${repobase}/${reponame}")

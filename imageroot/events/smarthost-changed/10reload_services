@@ -6,5 +6,9 @@
 #
 
 set -e
+exec 1>&2
 
-systemctl --user try-reload-or-restart gitlab.service
+if systemctl --user is-active --quiet gitlab.service; then
+    ../bin/write-config
+    systemctl --user try-reload-or-restart gitlab.service
+fi

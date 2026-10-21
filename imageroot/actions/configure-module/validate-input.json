@@ -1,13 +1,14 @@
 {
     "$schema": "http://json-schema.org/draft-07/schema#",
-    "title": "Configure dokuwiki",
-    "$id": "http://nethserver.org/json-schema/task/input/dokuwiki/configure",
-    "description": "Configure dokuwiki",
+    "title": "Configure gitlab",
+    "$id": "http://nethserver.org/json-schema/task/input/gitlab/configure",
+    "description": "Configure gitlab",
     "examples": [
         {
-            "host": "wiki.nethserver.org",
+            "host": "git.nethserver.org",
             "http2https": true,
-            "lets_encrypt": true
+            "lets_encrypt": true,
+            "runner_enabled": true
         }
     ],
     "type": "object",
@@ -34,18 +35,40 @@
             "description": "Redirect all the HTTP requests to HTTPS"
         },
         "password": {
-            "type": "string",
-            "description": "Gitlab initial root password"
+            "description": "Gitlab initial root password (min 8 characters if set)",
+            "anyOf": [
+                {
+                    "type": "string",
+                    "maxLength": 0
+                },
+                {
+                    "type": "string",
+                    "minLength": 8
+                }
+            ]
         },
         "ldap_domain": {
             "type": "string",
-            "description": "LDAP-Domain for authentification"
+            "description": "LDAP-Domain for authentication"
         },
         "registry_host": {
-            "type": "string",
             "description": "Host name for gitlab registry, like 'registry.nethserver.org'",
-            "format": "hostname",
-            "pattern": "\\."
+            "anyOf": [
+                {
+                    "type": "string",
+                    "maxLength": 0
+                },
+                {
+                    "type": "string",
+                    "format": "hostname",
+                    "pattern": "\\."
+                }
+            ]
+        },
+        "runner_enabled": {
+            "type": "boolean",
+            "title": "Enable GitLab Runner",
+            "description": "Start and register an integrated GitLab Runner container"
         }
     }
 }

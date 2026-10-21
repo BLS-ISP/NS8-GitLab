@@ -2,6 +2,11 @@ name: "Publish images"
 
 on:
   push:
+    branches-ignore:
+      - "renovate/**"
+      - "repomd"
+    tags:
+      - "**"
   workflow_dispatch:
 
 permissions:
@@ -11,16 +16,171 @@ permissions:
   security-events: write
 
 jobs:
+  create-release:
+    name: "Ensure GitHub Release exists for SemVer tag"
+    if: ${{ startsWith(github.ref, 'refs/tags/') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create GitHub Release if missing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if ! gh release view "${TAG}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            if [[ "${TAG}" == *-* ]]; then
+              gh release create "${TAG}" --repo "${{ github.repository }}" --title "Release ${TAG}" --generate-notes --prerelease
+            else
+              gh release create "${TAG}" --repo "${{ github.repository }}" --title "Release ${TAG}" --generate-notes --latest
+            fi
+          fi
+
   publish-images:
-    if: github.run_number > 1
     uses: NethServer/ns8-github-actions/.github/workflows/publish-branch.yml@v1
+
   module:
-    needs: publish-images
+    needs: [publish-images, create-release]
+    if: ${{ always() && needs.publish-images.result == 'success' && (needs.create-release.result == 'success' || needs.create-release.result == 'skipped') }}
     uses: NethServer/ns8-github-actions/.github/workflows/module-info.yml@v1
+
   trivy:
     needs: module
-
     if: ${{ needs.module.outputs.release == 'stable' || needs.module.outputs.release == 'latest' || github.event_name == 'workflow_dispatch' }}
     uses: NethServer/ns8-github-actions/.github/workflows/scan-with-trivy.yml@v1
     with:
       images: ${{ needs.module.outputs.images }}
+
+  repomd:
+    name: "Update NS8 Software Repository (repomd)"
+    needs: [publish-images, module]
+    if: ${{ startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Generate repodata.json from SemVer tags (NethServer standard)
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY_USER: ${{ github.actor }}
+          MODULE_OWNER: ${{ needs.module.outputs.owner }}
+          MODULE_NAME: ${{ needs.module.outputs.name }}
+          CURRENT_TAG: ${{ needs.module.outputs.tag }}
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q skopeo jq
+          trap 'skopeo logout ghcr.io || true' EXIT
+          skopeo login -u "${REGISTRY_USER}" --password-stdin ghcr.io <<<"${REGISTRY_TOKEN}"
+
+          python3 - <<'EOF'
+          import json
+          import os
+          import re
+          import subprocess
+          import sys
+
+          SEMVER_RE = re.compile(
+              r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
+              r"(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?"
+              r"(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$"
+          )
+
+          def parse_semver(tag):
+              m = SEMVER_RE.match(tag)
+              if not m:
+                  return None
+              major, minor, patch = int(m.group(1)), int(m.group(2)), int(m.group(3))
+              prerelease = m.group(4)
+              # Stable releases (prerelease is None) sort higher than prereleases of the same X.Y.Z
+              is_stable = 1 if prerelease is None else 0
+              return (major, minor, patch, is_stable, prerelease or "")
+
+          owner = os.environ["MODULE_OWNER"]
+          name = os.environ["MODULE_NAME"]
+          current_tag = os.environ["CURRENT_TAG"]
+          source = f"ghcr.io/{owner}/{name}"
+          print(f"Inspecting tags of {source} ...", file=sys.stderr)
+
+          proc = subprocess.run(
+              ["skopeo", "inspect", f"docker://{source}:{current_tag}"],
+              capture_output=True, text=True
+          )
+          if proc.returncode != 0:
+              proc = subprocess.run(
+                  ["skopeo", "inspect", f"docker://{source}:latest"],
+                  capture_output=True, text=True, check=True
+              )
+
+          repo_inspect = json.loads(proc.stdout)
+          repo_tags = repo_inspect.get("RepoTags", [])
+          if current_tag not in repo_tags and parse_semver(current_tag):
+              repo_tags.append(current_tag)
+
+          # Filter valid SemVer tags (ignoring internal auto-run tags >= 19.0.0 if 1.x tags exist)
+          valid_tags = [t for t in repo_tags if parse_semver(t) is not None]
+          if any(parse_semver(t)[0] < 19 for t in valid_tags):
+              valid_tags = [t for t in valid_tags if parse_semver(t)[0] < 19]
+
+          semver_tags = sorted(valid_tags, key=parse_semver, reverse=True)
+
+          versions = []
+          testing_found = False
+          for tag in semver_tags:
+              sv = parse_semver(tag)
+              is_prerelease = (sv[3] == 0)
+              if testing_found and is_prerelease:
+                  continue
+
+              insp = subprocess.run(
+                  ["skopeo", "inspect", f"docker://{source}:{tag}"],
+                  capture_output=True, text=True, check=True
+              )
+              labels = json.loads(insp.stdout).get("Labels", {})
+              versions.append({
+                  "tag": tag,
+                  "testing": is_prerelease,
+                  "labels": labels,
+              })
+
+              if not is_prerelease:
+                  break
+              else:
+                  testing_found = True
+
+          if not versions:
+              print("ERROR: No valid SemVer tags (e.g. 1.0.0) found in registry!", file=sys.stderr)
+              sys.exit(1)
+
+          with open("ui/public/metadata.json", "r", encoding="utf-8") as mf:
+              meta = json.load(mf)
+
+          pkg = {
+              "id": name,
+              "name": meta.get("name", "GitLab"),
+              "upstream_name": meta.get("upstream_name", "GitLab CE"),
+              "description": meta.get("description", {"en": "GitLab for NethServer 8"}),
+              "logo": "logo.png",
+              "screenshots": [],
+              "categories": meta.get("categories", ["development"]),
+              "authors": meta.get("authors", []),
+              "docs": meta.get("docs", {}),
+              "source": source,
+              "versions": versions,
+          }
+
+          os.makedirs(".repomd/gitlab", exist_ok=True)
+          with open(".repomd/repodata.json", "w", encoding="utf-8") as rf:
+              json.dump([pkg], rf, separators=(",", ":"))
+          print("Generated repodata.json:", json.dumps([pkg], indent=2), file=sys.stderr)
+          EOF
+
+          cp -f ui/public/metadata.json .repomd/gitlab/metadata.json
+          cp -f ui/src/assets/module_default_logo.png .repomd/gitlab/logo.png
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f .repomd/
+          TREE=$(git write-tree --prefix=.repomd)
+          COMMIT=$(git commit-tree -m "repomd: update metadata for ${{ github.ref_name }}" "${TREE}")
+          git push -f origin "${COMMIT}:refs/heads/repomd"

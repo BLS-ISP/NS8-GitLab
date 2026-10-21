@@ -7,15 +7,19 @@
 
 import json
 import sys
-import agent
+import subprocess
 import os
+import agent
 
 event = json.load(sys.stdin)
 
-if event.get('domain') != os.getenv('LAMP_LDAP_DOMAIN'):
-    exit(0)
+if event.get("domain") != os.getenv("LDAP_DOMAIN"):
+    sys.exit(0)
 
-if 'node' in event and str(event['node']) != os.getenv('NODE_ID'):
-    exit(0) # ignore event if the source is not in our node
+if "node" in event and str(event["node"]) != os.getenv("NODE_ID"):
+    sys.exit(0)  # ignore event if the source is not in our node
 
-agent.run_helper('systemctl', '--user', '-T', 'try-reload-or-restart', 'gitlab.service').check_returncode()
+bin_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "bin"))
+subprocess.run([sys.executable, os.path.join(bin_dir, "write-config")], check=True)
+
+agent.run_helper("systemctl", "--user", "-T", "try-reload-or-restart", "gitlab.service").check_returncode()

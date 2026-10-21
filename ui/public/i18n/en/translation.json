@@ -1,57 +1,79 @@
 {
-  "common": {
-    "required": "Required",
-    "work_in_progress": "Work in progress",
-    "processing": "Processing..."
-  },
-  "status": {
-    "title": "Status",
-    "app_instance": "App instance",
-    "services": "Service | Services",
-    "app_images": "App image | App images",
-    "app_volumes": "App volume | App volumes",
-    "installation_node": "Installation node",
-    "node": "Node",
-    "name": "Name",
-    "size": "Size",
-    "created": "Created",
-    "mount": "Mount",
-    "no_services": "No services",
-    "no_images": "No images",
-    "no_volumes": "No volumes"
-  },
-  "settings": {
-    "title": "Settings",
-    "configure_instance": "Configure {instance}",
-    "save": "Save",
-    "test_field": "Test field"
-  },
-  "about": {
-    "title": "About"
-  },
-  "task": {
-    "cannot_create_task": "Cannot create task {action}"
-  },
-  "action": {
-    "get-status": "Get status",
-    "get-configuration": "Get configuration",
-    "configure-module": "Configure module",
-    "get-module-info": "Get module info",
-    "get-name": "Get name",
-    "list-backup-repositories": "List backup repositories",
-    "list-backups": "List backups",
-    "list-installed-modules": "List installed modules"
-  },
-  "error": {
-    "error": "Error",
-    "generic_error": "Something went wrong",
-    "validation_error": "Validation error",
-    "network_error": "Network error",
-    "network_timeout": "Network timeout",
-    "401": "Invalid authentication",
-    "403": "Operation not authorized",
-    "404": "Resource not found",
-    "cannot_retrieve_module_info": "Cannot retrieve module info",
-    "cannot_retrieve_installed_modules": "Cannot retrieve installed modules"
-  }
+    "common": {
+        "required": "Required",
+        "work_in_progress": "Work in progress",
+        "processing": "Processing..."
+    },
+    "status": {
+        "title": "Status",
+        "app_instance": "App instance",
+        "services": "Service | Services",
+        "app_images": "App image | App images",
+        "app_volumes": "App volume | App volumes",
+        "installation_node": "Installation node",
+        "node": "Node",
+        "name": "Name",
+        "size": "Size",
+        "created": "Created",
+        "mount": "Mount",
+        "no_services": "No services",
+        "no_images": "No images",
+        "no_volumes": "No volumes"
+    },
+    "settings": {
+        "title": "Settings",
+        "configure_instance": "Configure {instance}",
+        "save": "Save",
+        "host": "GitLab Hostname (FQDN)",
+        "lets_encrypt": "Request Let's Encrypt certificate",
+        "http2https": "Redirect HTTP to HTTPS",
+        "enabled": "Enabled",
+        "disabled": "Disabled",
+        "password": "Root password (optional)",
+        "password_helper": "Minimum 8 characters. Leave empty to keep the current password.",
+        "password_too_short": "Password must be at least 8 characters long",
+        "ldap_domain": "LDAP / Active Directory domain",
+        "choose_ldap_domain": "Select LDAP domain",
+        "no_ldap_domain": "No LDAP domain (local users only)",
+        "clear_selection": "Clear selection",
+        "choose_the_ldap_domain_to_authenticate_users": "Select a NethServer 8 user domain to authenticate users.",
+        "registry_host": "Container Registry Hostname (optional)",
+        "registryHost": "Container Registry Hostname (optional)",
+        "registry_host_helper": "Optional FQDN for the integrated GitLab Container Registry (e.g. registry.example.org)",
+        "runner_enabled": "Enable integrated GitLab Runner",
+        "ssh_port_title": "Git SSH access (port opened in firewall)",
+        "ssh_port_description": "Assigned SSH port: {port} (Example: ssh://git@{host}:{port}/group/project.git)",
+        "invalid_fqdn": "Please enter a valid fully qualified domain name (FQDN)",
+        "domain_already_used_in_traefik": "This domain is already used in Traefik",
+        "registry_host_must_differ_from_host": "Registry hostname must be different from GitLab hostname"
+    },
+    "about": {
+        "title": "About",
+        "source_package": "Source package"
+    },
+    "task": {
+        "cannot_create_task": "Cannot create task {action}"
+    },
+    "action": {
+        "get-status": "Get status",
+        "get-configuration": "Get configuration",
+        "configure-module": "Configure module",
+        "get-module-info": "Get module info",
+        "get-name": "Get name",
+        "list-backup-repositories": "List backup repositories",
+        "list-backups": "List backups",
+        "list-installed-modules": "List installed modules"
+    },
+    "error": {
+        "error": "Error",
+        "generic_error": "Something went wrong",
+        "validation_error": "Validation error",
+        "network_error": "Network error",
+        "network_timeout": "Network timeout",
+        "401": "Invalid authentication",
+        "403": "Operation not authorized",
+        "404": "Resource not found",
+        "cannot_retrieve_module_info": "Cannot retrieve module info",
+        "cannot_retrieve_installed_modules": "Cannot retrieve installed modules"
+    }
 }
