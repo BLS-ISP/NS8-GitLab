@@ -85,6 +85,43 @@ api-cli run module/gitlab1/configure-module --data '{
 
 ---
 
+## Architecture, Volumes & Environment Variables (Developer / Support Reference)
+
+### Systemd User Units (`imageroot/systemd/user/`)
+
+- `gitlab.service`: Manages the rootless Podman pod (`gitlab`) with 512 MB `/dev/shm` and port mappings (`GITLAB_NGINX_PORT:80`, `GITLAB_REGISTRY_PORT:5050`, `GITLAB_SSH_PORT:22`).
+- `gitlab-app.service`: Runs the `docker.io/gitlab/gitlab-ce` container inside the pod. Executes `../bin/write-config` prior to startup to render `state/gitlab.rb` from the current module environment, NethServer 8 `Ldapproxy`, and Redis smarthost settings.
+- `gitlab-runner.service`: Optional container (`docker.io/gitlab/gitlab-runner`) attached to the rootless `podman.socket` (`%t/podman/podman.sock`).
+- `gitlab-runner-register.service`: Oneshot background service that waits for `/readiness` on `gitlab-app`, generates a `glrt-` runner authentication token via `Ci::Runners::CreateRunnerService`, and registers the runner automatically.
+
+### Persistent Volumes (`imageroot/etc/state-include.conf`)
+
+| Volume / Path | Container Mountpoint | Description | Included in Backup |
+|---|---|---|---|
+| `gitlab-data` | `/var/opt/gitlab` | Git repositories (Gitaly), PostgreSQL database, Redis state, registry storage | Yes |
+| `gitlab-config` | `/etc/gitlab` | Omnibus configuration (`gitlab.rb`), `gitlab-secrets.json`, SSH host keys | Yes |
+| `gitlab-runner-config` | `/etc/gitlab-runner` | Registered runner configuration (`config.toml`) | Yes |
+| `gitlab-logs` | `/var/log/gitlab` | Service and application logs | No |
+| `state/gitlab.rb` | `/assets/ns8-gitlab.rb` | Generated Omnibus configuration template | Yes |
+| `state/environment` | — | Module instance environment variables | Yes |
+
+### Environment Variables (`state/environment`)
+
+| Variable | Description |
+|---|---|
+| `HOST` | Configured FQDN for the GitLab web interface |
+| `HTTP2HTTPS` | Whether Traefik redirects HTTP to HTTPS (`True` / `False`) |
+| `LETS_ENCRYPT` | Whether Traefik requests a Let's Encrypt certificate (`True` / `False`) |
+| `GITLAB_NGINX_PORT` | Allocated local TCP port for GitLab HTTP behind Traefik |
+| `GITLAB_REGISTRY_PORT` | Allocated local TCP port for GitLab Container Registry behind Traefik |
+| `GITLAB_SSH_PORT` | Allocated public TCP port for Git over SSH (opened in node firewall) |
+| `GITLAB_REGISTRY_HOST` | Optional FQDN for the integrated Container Registry |
+| `LDAP_DOMAIN` | Optional NethServer 8 user domain name bound via `Ldapproxy` |
+| `RUNNER_ENABLED` | Enables or disables the integrated GitLab Runner (`True` / `False`) |
+| `GITLAB_INITIAL_PASSWORD` | Initial password for the `root` administrator account |
+
+---
+
 ## Update Module via CLI
 
 Updates are normally applied through the **NethServer 8 Software Center UI**. To manually update via CLI:
