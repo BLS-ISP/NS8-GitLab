@@ -155,13 +155,19 @@ jobs:
           with open("ui/public/metadata.json", "r", encoding="utf-8") as mf:
               meta = json.load(mf)
 
+          screenshots = []
+          if os.path.isdir("ui/public/screenshots"):
+              for fn in sorted(os.listdir("ui/public/screenshots")):
+                  if fn.lower().endswith(".png"):
+                      screenshots.append(f"screenshots/{fn}")
+
           pkg = {
               "id": name,
               "name": meta.get("name", "GitLab"),
               "upstream_name": meta.get("upstream_name", "GitLab CE"),
               "description": meta.get("description", {"en": "GitLab for NethServer 8"}),
               "logo": "logo.png",
-              "screenshots": [],
+              "screenshots": screenshots,
               "categories": meta.get("categories", ["development"]),
               "authors": meta.get("authors", []),
               "docs": meta.get("docs", {}),
@@ -169,7 +175,7 @@ jobs:
               "versions": versions,
           }
 
-          os.makedirs(".repomd/gitlab", exist_ok=True)
+          os.makedirs(".repomd/gitlab/screenshots", exist_ok=True)
           with open(".repomd/repodata.json", "w", encoding="utf-8") as rf:
               json.dump([pkg], rf, separators=(",", ":"))
           print("Generated repodata.json:", json.dumps([pkg], indent=2), file=sys.stderr)
@@ -177,6 +183,9 @@ jobs:
 
           cp -f ui/public/metadata.json .repomd/gitlab/metadata.json
           cp -f ui/src/assets/module_default_logo.png .repomd/gitlab/logo.png
+          if [ -d ui/public/screenshots ]; then
+            cp -rf ui/public/screenshots/. .repomd/gitlab/screenshots/
+          fi
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
