@@ -74,6 +74,6 @@
         "get-name": "Name abrufen"
     },
     "task": {
-        "cannot_create_task": "{task} kann nicht erstellt werden"
+        "cannot_create_task": "{action} kann nicht erstellt werden"
     }
 }

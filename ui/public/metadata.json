@@ -15,7 +15,9 @@
   "docs": {
     "documentation_url": "https://github.com/BLS-ISP/NS8-GitLab",
     "bug_url": "https://github.com/BLS-ISP/NS8-GitLab/issues",
-    "code_url": "https://github.com/BLS-ISP/NS8-GitLab"
+    "code_url": "https://github.com/BLS-ISP/NS8-GitLab",
+    "terms_url": "https://github.com/BLS-ISP/NS8-GitLab#data-privacy--terms",
+    "relnotes_url": "https://github.com/BLS-ISP/NS8-GitLab/releases"
   },
   "source": "ghcr.io/bls-isp/gitlab"
 }

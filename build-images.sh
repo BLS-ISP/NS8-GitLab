@@ -39,6 +39,8 @@ buildah config --entrypoint=/ \
     --label="org.nethserver.authorizations=traefik@any:routeadm cluster:accountconsumer node:fwadm" \
     --label="org.nethserver.tcp-ports-demand=3" \
     --label="org.nethserver.rootfull=0" \
+    --label="org.nethserver.min-core=3.0.0" \
+    --label="org.nethserver.volumes=gitlab-data gitlab-config gitlab-logs gitlab-runner-config" \
     --label="org.nethserver.images=docker.io/gitlab/gitlab-ce:19.5.0-ce.0 docker.io/gitlab/gitlab-runner:v19.5.0" \
     "${container}"
 # Commit the image

@@ -4,7 +4,8 @@
 
 - **GitHub Repository:** [`https://github.com/BLS-ISP/NS8-GitLab`](https://github.com/BLS-ISP/NS8-GitLab)
 - **Container Image:** `ghcr.io/bls-isp/gitlab`
-- **NS8 Software Center Repository URL:** `https://raw.githubusercontent.com/BLS-ISP/NS8-GitLab/repomd/`
+- **NS8 Software Center Repository URL:** `https://raw.githubusercontent.com/BLS-ISP/ns8-nethforge/repomd/ns8/updates/`
+- **License:** [GPL-3.0-or-later](LICENSE)
 
 ---
 
@@ -17,7 +18,8 @@
 - **Git over SSH** (automatically allocates a dedicated TCP port, opens it in the NS8 node firewall via `node:fwadm`, and configures `gitlab_shell_ssh_port`)
 - **Integrated GitLab Container Registry** (optional, exposed on a separate FQDN via Traefik)
 - **Integrated GitLab Runner (`v19.5.0`)** (optional toggle in UI; enables `podman.socket` and automatically registers the instance runner in the background using the `glrt-` runner authentication token workflow once GitLab is ready)
-- **Backup, Restore & Clone/Move** (`restore-module`, `clone-module`, and `update-module` support)
+- **Custom Disk / Volume Selection** (`org.nethserver.volumes` label unlocks NS8 disk selection for `gitlab-data`, `gitlab-config`, `gitlab-logs`, and `gitlab-runner-config`)
+- **Backup, Restore & Clone/Move** (`module-dump-state`, `module-cleanup-state`, `restore-module`, `clone-module`, and `update-module` support)
 
 ---
 
@@ -27,10 +29,10 @@
 2. Go to **Software center → Settings → Software repositories → Add repository**.
 3. Enter the following details:
    - **Name:** `bls-isp`
-   - **URL:** `https://raw.githubusercontent.com/BLS-ISP/NS8-GitLab/repomd/`
+   - **URL:** `https://raw.githubusercontent.com/BLS-ISP/ns8-nethforge/repomd/ns8/updates/`
    - **Status:** Enabled
-4. Open **Software center**, find **GitLab**, and click **Install**.
-5. Future module updates published with a newer Semantic Version tag (e.g. `1.0.1`, `1.1.0`) will automatically appear in the **Software center → Updates** view.
+4. Open **Software center**, find **GitLab**, and click **Install** (you can optionally expand **Configure additional volumes** during installation to place `gitlab-data` on a dedicated disk).
+5. Future module updates published with a newer Semantic Version tag (e.g. `1.0.3`, `1.1.0`) will automatically appear in the **Software center → Updates** view.
 
 > **Tip:** To clear the 1-hour repository metadata cache on NS8 and immediately see a newly published release:
 > ```bash
@@ -44,13 +46,13 @@
 Instantiate the module using a **Semantic Version tag** (do not use `:latest` in production, as NS8 skips UI updates for `:latest` development instances):
 
 ```bash
-add-module ghcr.io/bls-isp/gitlab:1.0.0 1
+add-module ghcr.io/bls-isp/gitlab:1.0.3 1
 ```
 
 The output of the command will return the instance name:
 
 ```json
-{"module_id": "gitlab1", "image_name": "gitlab", "image_url": "ghcr.io/bls-isp/gitlab:1.0.0"}
+{"module_id": "gitlab1", "image_name": "gitlab", "image_url": "ghcr.io/bls-isp/gitlab:1.0.3"}
 ```
 
 ---
@@ -90,20 +92,20 @@ api-cli run module/gitlab1/configure-module --data '{
 ### Systemd User Units (`imageroot/systemd/user/`)
 
 - `gitlab.service`: Manages the rootless Podman pod (`gitlab`) with 512 MB `/dev/shm` and port mappings (`GITLAB_NGINX_PORT:80`, `GITLAB_REGISTRY_PORT:5050`, `GITLAB_SSH_PORT:22`).
-- `gitlab-app.service`: Runs the `docker.io/gitlab/gitlab-ce` container inside the pod. Executes `../bin/write-config` prior to startup to render `state/gitlab.rb` from the current module environment, NethServer 8 `Ldapproxy`, and Redis smarthost settings.
-- `gitlab-runner.service`: Optional container (`docker.io/gitlab/gitlab-runner`) attached to the rootless `podman.socket` (`%t/podman/podman.sock`).
-- `gitlab-runner-register.service`: Oneshot background service that waits for `/readiness` on `gitlab-app`, generates a `glrt-` runner authentication token via `Ci::Runners::CreateRunnerService`, and registers the runner automatically.
+- `gitlab-app.service`: Runs the `docker.io/gitlab/gitlab-ce:19.5.0-ce.0` container inside the pod. Executes `../bin/write-config` prior to startup to render `state/gitlab.rb` from the current module environment, NethServer 8 `Ldapproxy`, and Redis smarthost settings.
+- `gitlab-runner.service`: Optional container (`docker.io/gitlab/gitlab-runner:v19.5.0`) attached to the rootless `podman.socket` (`%t/podman/podman.sock`).
+- `gitlab-runner-register.service`: Oneshot background service (`RemainAfterExit=yes`) that waits for `http://127.0.0.1:80/-/readiness` inside `gitlab-app`, generates a `glrt-` runner authentication token via `Ci::Runners::CreateRunnerService`, and registers the runner automatically.
 
-### Persistent Volumes (`imageroot/etc/state-include.conf`)
+### Persistent Volumes (`imageroot/etc/state-include.conf` & `org.nethserver.volumes`)
 
 | Volume / Path | Container Mountpoint | Description | Included in Backup |
 |---|---|---|---|
-| `gitlab-data` | `/var/opt/gitlab` | Git repositories (Gitaly), PostgreSQL database, Redis state, registry storage | Yes |
-| `gitlab-config` | `/etc/gitlab` | Omnibus configuration (`gitlab.rb`), `gitlab-secrets.json`, SSH host keys | Yes |
-| `gitlab-runner-config` | `/etc/gitlab-runner` | Registered runner configuration (`config.toml`) | Yes |
-| `gitlab-logs` | `/var/log/gitlab` | Service and application logs | No |
-| `state/gitlab.rb` | `/assets/ns8-gitlab.rb` | Generated Omnibus configuration template | Yes |
-| `state/environment` | — | Module instance environment variables | Yes |
+| `volumes/gitlab-data` | `/var/opt/gitlab` | Git repositories (Gitaly), PostgreSQL database, Redis state, registry storage | Yes |
+| `volumes/gitlab-config` | `/etc/gitlab` | Omnibus configuration (`gitlab.rb`), `gitlab-secrets.json`, SSH host keys | Yes |
+| `volumes/gitlab-runner-config` | `/etc/gitlab-runner` | Registered runner configuration (`config.toml`) | Yes |
+| `volumes/gitlab-logs` | `/var/log/gitlab` | Service and application logs | No |
+| `state/gitlab.rb` | `/assets/ns8-gitlab.rb` | Generated Omnibus configuration template | Yes (implicit `state/`) |
+| `state/environment` | — | Module instance environment variables | Yes (implicit `state/`) |
 
 ### Environment Variables (`state/environment`)
 
@@ -120,6 +122,12 @@ api-cli run module/gitlab1/configure-module --data '{
 | `RUNNER_ENABLED` | Enables or disables the integrated GitLab Runner (`True` / `False`) |
 | `GITLAB_INITIAL_PASSWORD` | Initial password for the `root` administrator account |
 
+### Maintenance, Backup & Restore
+
+- **Pre-Backup Hook (`imageroot/bin/module-dump-state`):** Automatically invoked by NS8 `run-backup` before Restic snapshots the module volumes. When `gitlab-app` is active, it runs `gitlab-backup create SKIP=repositories,uploads,builds,artifacts,lfs,terraform_state,ci_secure_files,pages,registry,packages CRON=1` to write a consistent hot PostgreSQL database dump into `/var/opt/gitlab/backups/` without duplicating large repository or registry blobs already covered by `volumes/gitlab-data`.
+- **Post-Backup Hook (`imageroot/bin/module-cleanup-state`):** Removes temporary `/var/opt/gitlab/backups/*_gitlab_backup.tar` archives after the Restic snapshot finishes.
+- **Restore & Clone (`restore-module` / `clone-module`):** Re-applies the Traefik HTTP routes, firewall rules for the allocated `GITLAB_SSH_PORT`, LDAP/Smarthost bindings, and systemd unit states on the target node.
+
 ---
 
 ## Update Module via CLI
@@ -127,21 +135,21 @@ api-cli run module/gitlab1/configure-module --data '{
 Updates are normally applied through the **NethServer 8 Software Center UI**. To manually update via CLI:
 
 ```bash
-api-cli run update-module --data '{"module_url":"ghcr.io/bls-isp/gitlab:1.0.1","instances":["gitlab1"]}'
+api-cli run update-module --data '{"module_url":"ghcr.io/bls-isp/gitlab:1.0.3","instances":["gitlab1"]}'
 ```
 
 ---
 
 ## Publishing a New Release (Semantic Versioning)
 
-In accordance with NethServer 8 standards, releases must use pure **Semantic Versioning (`X.Y.Z`) without a `v` prefix** (e.g. `1.0.0`, `1.0.1`, or `1.0.2-testing.1` for pre-releases):
+In accordance with NethServer 8 standards, releases must use pure **Semantic Versioning (`X.Y.Z`) without a `v` prefix** (e.g. `1.0.3`, `1.1.0`, or `1.1.0-testing.1` for pre-releases):
 
 ```bash
-git tag -a 1.0.1 -m "Release 1.0.1"
+git tag -a 1.0.3 -m "Release 1.0.3"
 git push origin main --tags
 ```
 
-The GitHub Actions workflow (`.github/workflows/publish-images.yml`) automatically builds and publishes `ghcr.io/bls-isp/gitlab:1.0.1` and updates `repodata.json` on the `repomd` branch.
+The GitHub Actions workflow (`.github/workflows/publish-images.yml`) automatically builds and publishes `ghcr.io/bls-isp/gitlab:1.0.3` and updates `repodata.json` on the `repomd` branch.
 
 ---
 
@@ -160,5 +168,22 @@ remove-module --no-preserve gitlab1
 Test the module using the `test-module.sh` script:
 
 ```bash
-./test-module.sh <NODE_ADDR> ghcr.io/bls-isp/gitlab:1.0.0
+./test-module.sh <NODE_ADDR> ghcr.io/bls-isp/gitlab:1.0.3
 ```
+
+---
+
+## Data Privacy & Terms
+
+This module runs **100% self-hosted** on your NethServer 8 cluster:
+
+- **No External Telemetry:** All Git repositories, CI/CD artifacts, container images, issues, and user credentials remain exclusively on your NethServer 8 node inside the rootless module volumes (`gitlab-data`, `gitlab-config`, `gitlab-runner-config`). Usage ping and Puma/Sidekiq Prometheus exporters are disabled by default to minimize footprint and prevent unwanted telemetry.
+- **Terms & License:** Distributed under the **GNU General Public License v3.0 or later (`GPL-3.0-or-later`)** without warranty of any kind. See [`LICENSE`](LICENSE) for full details.
+
+---
+
+## Limitations, Roadmap & Contact
+
+- **Hardware Requirements:** GitLab CE Omnibus bundles PostgreSQL, Gitaly, Redis, Puma, Sidekiq, and Workhorse. While tuned for lower memory consumption (~2.5–3 GB RAM idle), at least **4 GB of free RAM** and **2–4 CPU cores** are recommended on the target NS8 node.
+- **Bug Reports & Feature Requests:** Please open an issue on [GitHub Issues](https://github.com/BLS-ISP/NS8-GitLab/issues).
+- **Maintainer Contact:** BLS-ISP (`info@bls-isp.de`) or via the [NethServer Community Forum](https://community.nethserver.org/).

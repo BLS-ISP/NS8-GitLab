@@ -1,8 +1,94 @@
 {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "title": "get-configuration output",
-    "$id": "http://schema.nethserver.org/kickstart/get-configuration-output.json",
-    "description": "Get gitlab configuration",
-    "examples": [],
-    "type": "object"
+    "$id": "http://nethserver.org/json-schema/task/output/gitlab/get-configuration",
+    "description": "Get GitLab module configuration",
+    "examples": [
+        {
+            "host": "git.nethserver.org",
+            "http2https": true,
+            "lets_encrypt": true,
+            "ldap_domain": "ldap.nethserver.org",
+            "ldap_domain_list": [
+                {
+                    "name": "ldap.nethserver.org",
+                    "label": "ldap.nethserver.org",
+                    "value": "ldap.nethserver.org"
+                }
+            ],
+            "registry_host": "registry.nethserver.org",
+            "runner_enabled": true,
+            "ssh_port": "20014",
+            "configured": true
+        }
+    ],
+    "type": "object",
+    "required": [
+        "host",
+        "http2https",
+        "lets_encrypt",
+        "ldap_domain",
+        "ldap_domain_list",
+        "registry_host",
+        "runner_enabled",
+        "ssh_port",
+        "configured"
+    ],
+    "properties": {
+        "host": {
+            "type": "string",
+            "description": "Configured FQDN for the GitLab web interface"
+        },
+        "http2https": {
+            "type": "boolean",
+            "description": "Redirect HTTP requests to HTTPS"
+        },
+        "lets_encrypt": {
+            "type": "boolean",
+            "description": "Request a valid Let's Encrypt certificate"
+        },
+        "ldap_domain": {
+            "type": "string",
+            "description": "Configured NethServer 8 LDAP / Active Directory domain"
+        },
+        "ldap_domain_list": {
+            "type": "array",
+            "description": "Available NethServer 8 user domains",
+            "items": {
+                "type": "object",
+                "required": [
+                    "name",
+                    "label",
+                    "value"
+                ],
+                "properties": {
+                    "name": {
+                        "type": "string"
+                    },
+                    "label": {
+                        "type": "string"
+                    },
+                    "value": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "registry_host": {
+            "type": "string",
+            "description": "Optional FQDN for the integrated GitLab Container Registry"
+        },
+        "runner_enabled": {
+            "type": "boolean",
+            "description": "Whether the integrated GitLab Runner container is enabled"
+        },
+        "ssh_port": {
+            "type": "string",
+            "description": "Allocated public TCP port for Git over SSH"
+        },
+        "configured": {
+            "type": "boolean",
+            "description": "Whether the module has been configured at least once"
+        }
+    }
 }
