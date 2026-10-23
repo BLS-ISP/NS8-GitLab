@@ -1,6 +1,6 @@
 {
   "name": "GitLab",
-  "upstream_name": "GitLab CE 19.5.0",
+  "upstream_name": "GitLab CE 19.5.1",
   "description": {
     "en": "Self-hosted GitLab Community Edition DevSecOps platform for Git repositories, CI/CD, and Container Registry",
     "de": "Selbstgehostete GitLab Community Edition DevSecOps-Plattform für Git-Repositories, CI/CD und Container Registry"

@@ -11,13 +11,13 @@
 
 ## Features
 
-- **GitLab CE (`19.5.0-ce.0`)** running in a rootless Podman pod behind the NS8 Traefik reverse proxy
+- **GitLab CE (`19.5.1-ce.0`)** running in a rootless Podman pod behind the NS8 Traefik reverse proxy
 - **Let's Encrypt & HTTP-to-HTTPS redirect** configurable via the NS8 Web UI
 - **NS8 LDAP / Active Directory integration** (automatic user authentication via NS8 user domains and `Ldapproxy`, including `user-domain-changed` event handler)
 - **NS8 Smarthost / SMTP integration** (automatic discovery and reload on `smarthost-changed` events)
 - **Git over SSH** (automatically allocates a dedicated TCP port, opens it in the NS8 node firewall via `node:fwadm`, and configures `gitlab_shell_ssh_port`)
 - **Integrated GitLab Container Registry** (optional, exposed on a separate FQDN via Traefik)
-- **Integrated GitLab Runner (`v19.5.0`)** (optional toggle in UI; enables `podman.socket` and automatically registers the instance runner in the background using the `glrt-` runner authentication token workflow once GitLab is ready)
+- **Integrated GitLab Runner (`v19.5.1`)** (optional toggle in UI; enables `podman.socket` and automatically registers the instance runner in the background using the `glrt-` runner authentication token workflow once GitLab is ready)
 - **Custom Disk / Volume Selection** (`org.nethserver.volumes` label unlocks NS8 disk selection for `gitlab-data`, `gitlab-config`, `gitlab-logs`, and `gitlab-runner-config`)
 - **Backup, Restore & Clone/Move** (`module-dump-state`, `module-cleanup-state`, `restore-module`, `clone-module`, and `update-module` support)
 
@@ -32,7 +32,7 @@
    - **URL:** `https://raw.githubusercontent.com/BLS-ISP/ns8-nethforge/repomd/ns8/updates/`
    - **Status:** Enabled
 4. Open **Software center**, find **GitLab**, and click **Install** (you can optionally expand **Configure additional volumes** during installation to place `gitlab-data` on a dedicated disk).
-5. Future module updates published with a newer Semantic Version tag (e.g. `1.0.3`, `1.1.0`) will automatically appear in the **Software center → Updates** view.
+5. Future module updates published with a newer Semantic Version tag (e.g. `1.0.4`, `1.1.0`) will automatically appear in the **Software center → Updates** view.
 
 > **Tip:** To clear the 1-hour repository metadata cache on NS8 and immediately see a newly published release:
 > ```bash
@@ -46,13 +46,13 @@
 Instantiate the module using a **Semantic Version tag** (do not use `:latest` in production, as NS8 skips UI updates for `:latest` development instances):
 
 ```bash
-add-module ghcr.io/bls-isp/gitlab:1.0.3 1
+add-module ghcr.io/bls-isp/gitlab:1.0.4 1
 ```
 
 The output of the command will return the instance name:
 
 ```json
-{"module_id": "gitlab1", "image_name": "gitlab", "image_url": "ghcr.io/bls-isp/gitlab:1.0.3"}
+{"module_id": "gitlab1", "image_name": "gitlab", "image_url": "ghcr.io/bls-isp/gitlab:1.0.4"}
 ```
 
 ---
@@ -92,8 +92,8 @@ api-cli run module/gitlab1/configure-module --data '{
 ### Systemd User Units (`imageroot/systemd/user/`)
 
 - `gitlab.service`: Manages the rootless Podman pod (`gitlab`) with 512 MB `/dev/shm` and port mappings (`GITLAB_NGINX_PORT:80`, `GITLAB_REGISTRY_PORT:5050`, `GITLAB_SSH_PORT:22`).
-- `gitlab-app.service`: Runs the `docker.io/gitlab/gitlab-ce:19.5.0-ce.0` container inside the pod. Executes `../bin/write-config` prior to startup to render `state/gitlab.rb` from the current module environment, NethServer 8 `Ldapproxy`, and Redis smarthost settings.
-- `gitlab-runner.service`: Optional container (`docker.io/gitlab/gitlab-runner:v19.5.0`) attached to the rootless `podman.socket` (`%t/podman/podman.sock`).
+- `gitlab-app.service`: Runs the `docker.io/gitlab/gitlab-ce:19.5.1-ce.0` container inside the pod. Executes `../bin/write-config` prior to startup to render `state/gitlab.rb` from the current module environment, NethServer 8 `Ldapproxy`, and Redis smarthost settings.
+- `gitlab-runner.service`: Optional container (`docker.io/gitlab/gitlab-runner:v19.5.1`) attached to the rootless `podman.socket` (`%t/podman/podman.sock`).
 - `gitlab-runner-register.service`: Oneshot background service (`RemainAfterExit=yes`) that waits for `http://127.0.0.1:80/-/readiness` inside `gitlab-app`, generates a `glrt-` runner authentication token via `Ci::Runners::CreateRunnerService`, and registers the runner automatically.
 
 ### Persistent Volumes (`imageroot/etc/state-include.conf` & `org.nethserver.volumes`)
@@ -135,21 +135,21 @@ api-cli run module/gitlab1/configure-module --data '{
 Updates are normally applied through the **NethServer 8 Software Center UI**. To manually update via CLI:
 
 ```bash
-api-cli run update-module --data '{"module_url":"ghcr.io/bls-isp/gitlab:1.0.3","instances":["gitlab1"]}'
+api-cli run update-module --data '{"module_url":"ghcr.io/bls-isp/gitlab:1.0.4","instances":["gitlab1"]}'
 ```
 
 ---
 
 ## Publishing a New Release (Semantic Versioning)
 
-In accordance with NethServer 8 standards, releases must use pure **Semantic Versioning (`X.Y.Z`) without a `v` prefix** (e.g. `1.0.3`, `1.1.0`, or `1.1.0-testing.1` for pre-releases):
+In accordance with NethServer 8 standards, releases must use pure **Semantic Versioning (`X.Y.Z`) without a `v` prefix** (e.g. `1.0.4`, `1.1.0`, or `1.1.0-testing.1` for pre-releases):
 
 ```bash
-git tag -a 1.0.3 -m "Release 1.0.3"
+git tag -a 1.0.4 -m "Release 1.0.4"
 git push origin main --tags
 ```
 
-The GitHub Actions workflow (`.github/workflows/publish-images.yml`) automatically builds and publishes `ghcr.io/bls-isp/gitlab:1.0.3` and updates `repodata.json` on the `repomd` branch.
+The GitHub Actions workflow (`.github/workflows/publish-images.yml`) automatically builds and publishes `ghcr.io/bls-isp/gitlab:1.0.4` and updates `repodata.json` on the `repomd` branch.
 
 ---
 
@@ -168,7 +168,7 @@ remove-module --no-preserve gitlab1
 Test the module using the `test-module.sh` script:
 
 ```bash
-./test-module.sh <NODE_ADDR> ghcr.io/bls-isp/gitlab:1.0.3
+./test-module.sh <NODE_ADDR> ghcr.io/bls-isp/gitlab:1.0.4
 ```
 
 ---
