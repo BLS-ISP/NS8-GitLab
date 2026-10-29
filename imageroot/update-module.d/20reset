@@ -10,8 +10,30 @@ set -e
 # Redirect any output to the journal (stderr)
 exec 1>&2
 
+# Migrate legacy GITLAB_INITIAL_PASSWORD from environment to passwords.env (mode 0600)
+python3 - <<'EOF'
+import os
+import agent
+
+if "GITLAB_INITIAL_PASSWORD" in os.environ:
+    pw = os.environ["GITLAB_INITIAL_PASSWORD"]
+    passwords_file = "passwords.env"
+    secret_vars = {}
+    if os.path.exists(passwords_file):
+        try:
+            secret_vars.update(agent.read_envfile(passwords_file))
+        except Exception:
+            pass
+    if pw and not secret_vars.get("GITLAB_INITIAL_PASSWORD"):
+        secret_vars["GITLAB_INITIAL_PASSWORD"] = pw
+        agent.write_envfile(passwords_file, secret_vars)
+        os.chmod(passwords_file, 0o600)
+    agent.unset_env("GITLAB_INITIAL_PASSWORD")
+    agent.dump_env()
+EOF
+
 systemctl --user daemon-reload
-systemctl --user try-restart gitlab.service
+systemctl --user try-restart gitlab.service gitlab-app.service
 
 if [[ "${RUNNER_ENABLED:-True}" == "True" ]] && systemctl --user is-active --quiet gitlab.service; then
     systemctl --user enable --now podman.socket

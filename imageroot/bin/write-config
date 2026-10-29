@@ -24,18 +24,25 @@ if os.path.exists("environment"):
     except Exception:
         pass
 
+secret_vars = {}
+if os.path.exists("passwords.env"):
+    try:
+        secret_vars.update(agent.read_envfile("passwords.env"))
+    except Exception:
+        pass
+
 host = env.get("HOST", "gitlab.local")
 registry_url = env.get("GITLAB_REGISTRY_HOST", "")
 ldap_domain = env.get("LDAP_DOMAIN", "")
 ssh_port = env.get("GITLAB_SSH_PORT", "")
-initial_password = env.get("GITLAB_INITIAL_PASSWORD", "")
+initial_password = secret_vars.get("GITLAB_INITIAL_PASSWORD", "")
 
 smtp_settings = {}
 try:
     rdb = agent.redis_connect(use_replica=True)
     smtp_settings = agent.get_smarthost_settings(rdb) or {}
 except Exception as ex:
-    print(f"Warning: could not read smarthost settings from Redis: {ex}", file=sys.stderr)
+    print(agent.SD_WARNING + f"Could not read smarthost settings from Redis: {ex}", file=sys.stderr)
 
 lines = [
     "# Generated automatically by NethServer 8 GitLab module",
@@ -134,9 +141,9 @@ if ldap_domain:
                 f"gitlab_rails['ldap_servers'] = JSON.parse({json.dumps(json.dumps(ldap_servers))})",
             ])
         else:
-            print(f"Warning: LDAP domain '{ldap_domain}' not currently available in Ldapproxy", file=sys.stderr)
+            print(agent.SD_WARNING + f"LDAP domain '{ldap_domain}' not currently available in Ldapproxy", file=sys.stderr)
     except Exception as ex:
-        print(f"Warning: failed to load LDAP domain '{ldap_domain}': {ex}", file=sys.stderr)
+        print(agent.SD_WARNING + f"Failed to load LDAP domain '{ldap_domain}': {ex}", file=sys.stderr)
 else:
     lines.extend([
         "",

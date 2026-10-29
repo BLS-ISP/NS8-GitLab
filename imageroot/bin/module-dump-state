@@ -6,9 +6,12 @@
 #
 
 set -e
+exec 1>&2
 
 if systemctl --user -q is-active gitlab-app; then
-    podman exec gitlab-app gitlab-backup create \
-        SKIP=repositories,uploads,builds,artifacts,lfs,terraform_state,ci_secure_files,pages,registry,packages \
-        CRON=1
+    if podman exec gitlab-app test -f /var/opt/gitlab/bootstrapped; then
+        podman exec gitlab-app gitlab-backup create \
+            SKIP=repositories,uploads,builds,artifacts,lfs,terraform_state,ci_secure_files,pages,registry,packages \
+            CRON=1
+    fi
 fi

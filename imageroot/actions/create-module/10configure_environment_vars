@@ -24,5 +24,9 @@ if len(tcp_ports) >= 3:
 agent.set_env("HTTP2HTTPS", "True")
 agent.set_env("LETS_ENCRYPT", "False")
 agent.set_env("RUNNER_ENABLED", "True")
-agent.set_env("GITLAB_INITIAL_PASSWORD", secrets.token_urlsafe(16))
 agent.dump_env()
+
+passwords_file = "passwords.env"
+if not os.path.exists(passwords_file):
+    agent.write_envfile(passwords_file, {"GITLAB_INITIAL_PASSWORD": secrets.token_urlsafe(16)})
+    os.chmod(passwords_file, 0o600)

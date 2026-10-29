@@ -6,6 +6,7 @@
 #
 
 set -e
+exec 1>&2
 
 if systemctl --user -q is-active gitlab-app; then
     podman exec gitlab-app sh -c 'rm -f /var/opt/gitlab/backups/*_gitlab_backup.tar'

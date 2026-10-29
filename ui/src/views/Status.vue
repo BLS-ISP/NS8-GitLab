@@ -110,9 +110,9 @@
     </cv-row>
     <cv-row v-if="!loading.getStatus">
       <cv-column v-if="!status.services.length">
-        <cv-tile light>
+        <NsTile :light="true">
           <NsEmptyState :title="$t('status.no_services')"> </NsEmptyState>
-        </cv-tile>
+        </NsTile>
       </cv-column>
       <cv-column
         v-else
@@ -134,12 +134,12 @@
     </cv-row>
     <cv-row v-else>
       <cv-column :md="4" :max="4">
-        <cv-tile light>
+        <NsTile :light="true">
           <cv-skeleton-text
             :paragraph="true"
             :line-count="4"
           ></cv-skeleton-text>
-        </cv-tile>
+        </NsTile>
       </cv-column>
     </cv-row>
     <!-- images -->
@@ -150,7 +150,7 @@
     </cv-row>
     <cv-row>
       <cv-column>
-        <cv-tile light>
+        <NsTile :light="true">
           <div v-if="!loading.getStatus">
             <NsEmptyState
               v-if="!status.images.length"
@@ -192,7 +192,7 @@
             :paragraph="true"
             :line-count="5"
           ></cv-skeleton-text>
-        </cv-tile>
+        </NsTile>
       </cv-column>
     </cv-row>
     <!-- volumes -->
@@ -203,7 +203,7 @@
     </cv-row>
     <cv-row>
       <cv-column>
-        <cv-tile light>
+        <NsTile :light="true">
           <div v-if="!loading.getStatus">
             <NsEmptyState
               v-if="!status.volumes.length"
@@ -245,7 +245,7 @@
             :paragraph="true"
             :line-count="5"
           ></cv-skeleton-text>
-        </cv-tile>
+        </NsTile>
       </cv-column>
     </cv-row>
   </cv-grid>

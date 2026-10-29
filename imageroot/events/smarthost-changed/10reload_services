@@ -10,5 +10,5 @@ exec 1>&2
 
 if systemctl --user is-active --quiet gitlab.service; then
     ../bin/write-config
-    systemctl --user try-reload-or-restart gitlab.service
+    systemctl --user try-reload-or-restart gitlab.service gitlab-app.service
 fi

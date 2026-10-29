@@ -25,7 +25,6 @@ ExecStart=/usr/bin/podman run \
     --cgroups=no-conmon \
     --pod-id-file %t/gitlab.pod-id \
     --replace \
-    --env GITLAB_ROOT_PASSWORD=${GITLAB_INITIAL_PASSWORD} \
     --env GITLAB_PRE_RECONFIGURE_SCRIPT="cp -f /assets/ns8-gitlab.rb /etc/gitlab/gitlab.rb && chmod 0600 /etc/gitlab/gitlab.rb" \
     --volume %S/state/gitlab.rb:/assets/ns8-gitlab.rb:ro,Z \
     --volume gitlab-config:/etc/gitlab:Z \

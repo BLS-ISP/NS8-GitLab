@@ -72,6 +72,8 @@ jobs:
           sudo apt-get update -q && sudo apt-get install -y -q skopeo jq
           trap 'skopeo logout ghcr.io || true' EXIT
           skopeo login -u "${REGISTRY_USER}" --password-stdin ghcr.io <<<"${REGISTRY_TOKEN}"
+          skopeo delete "docker://ghcr.io/${MODULE_OWNER}/${MODULE_NAME}:19.5.0" 2>/dev/null || true
+          skopeo delete "docker://ghcr.io/${MODULE_OWNER}/${MODULE_NAME}:19.5.1" 2>/dev/null || true
 
           python3 - <<'EOF'
           import json

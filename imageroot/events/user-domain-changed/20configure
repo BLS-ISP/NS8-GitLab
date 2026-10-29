@@ -22,4 +22,4 @@ if "node" in event and str(event["node"]) != os.getenv("NODE_ID"):
 bin_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "bin"))
 subprocess.run([sys.executable, os.path.join(bin_dir, "write-config")], check=True)
 
-agent.run_helper("systemctl", "--user", "-T", "try-reload-or-restart", "gitlab.service").check_returncode()
+agent.run_helper("systemctl", "--user", "-T", "try-reload-or-restart", "gitlab.service", "gitlab-app.service").check_returncode()

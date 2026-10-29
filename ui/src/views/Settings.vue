@@ -36,16 +36,16 @@
     </cv-row>
     <cv-row>
       <cv-column>
-        <cv-tile light>
+        <NsTile :light="true">
           <cv-form @submit.prevent="configureModule">
-            <cv-text-input
+            <NsTextInput
               :label="$t('settings.host')"
               v-model.trim="host"
               placeholder="git.example.org"
               :disabled="loading.getConfiguration || loading.configureModule"
               :invalid-message="error.host"
               ref="host"
-            ></cv-text-input>
+            ></NsTextInput>
             <NsToggle
               :label="$t('settings.lets_encrypt')"
               value="lets_encrypt"
@@ -76,7 +76,7 @@
                 $t("settings.enabled")
               }}</template>
             </NsToggle>
-            <cv-text-input
+            <NsTextInput
               :label="$t('settings.password')"
               type="password"
               v-model.trim="password"
@@ -84,7 +84,7 @@
               :disabled="loading.getConfiguration || loading.configureModule"
               :invalid-message="error.password"
               ref="password"
-            ></cv-text-input>
+            ></NsTextInput>
             <NsComboBox
               v-model.trim="ldap_domain"
               :autoFilter="true"
@@ -107,7 +107,7 @@
                 }}
               </template>
             </NsComboBox>
-            <cv-text-input
+            <NsTextInput
               :label="$t('settings.registry_host')"
               v-model.trim="registry_host"
               placeholder="registry.example.org"
@@ -115,7 +115,7 @@
               :disabled="loading.getConfiguration || loading.configureModule"
               :invalid-message="error.registry_host"
               ref="registry_host"
-            ></cv-text-input>
+            ></NsTextInput>
             <NsToggle
               :label="$t('settings.runner_enabled')"
               value="runner_enabled"
@@ -149,7 +149,7 @@
               >{{ $t("settings.save") }}</NsButton
             >
           </cv-form>
-        </cv-tile>
+        </NsTile>
       </cv-column>
     </cv-row>
   </cv-grid>
@@ -355,6 +355,9 @@ export default {
       for (const validationError of validationErrors) {
         const param = validationError.parameter;
         this.error[param] = this.$t("settings." + validationError.error);
+      }
+      if (validationErrors.length) {
+        this.focusElement(validationErrors[0].parameter);
       }
     },
     async configureModule() {

@@ -1,0 +1,41 @@
+#!/bin/bash
+
+#
+# Copyright (C) 2024 Nethesis S.r.l.
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+
+set -e
+exec 1>&2
+
+# Restore GitLab PostgreSQL database from the backup archive created by module-dump-state
+podman run --rm \
+    --name gitlab-restore-db \
+    --volume gitlab-config:/etc/gitlab:Z \
+    --volume gitlab-data:/var/opt/gitlab:Z \
+    "${GITLAB_CE_IMAGE}" \
+    bash -c '
+        set -e
+        shopt -s nullglob
+        backups=(/var/opt/gitlab/backups/*_gitlab_backup.tar)
+        if [ ${#backups[@]} -eq 0 ]; then
+            echo "No GitLab backup archive found in /var/opt/gitlab/backups, skipping DB restore."
+            exit 0
+        fi
+        latest_backup="${backups[-1]}"
+        backup_id=$(basename "${latest_backup}" _gitlab_backup.tar)
+        echo "Restoring GitLab database from backup ${backup_id}..."
+        rm -f /var/opt/gitlab/postgresql/data/postmaster.pid
+        /opt/gitlab/embedded/bin/runsvdir-start &
+        sleep 2
+        gitlab-ctl start postgresql
+        for i in $(seq 1 30); do
+            if gitlab-psql -d postgres -c "SELECT 1" >/dev/null 2>&1; then
+                break
+            fi
+            sleep 2
+        done
+        GITLAB_ASSUME_YES=1 gitlab-backup restore BACKUP="${backup_id}" force=yes
+        rm -f /var/opt/gitlab/backups/*_gitlab_backup.tar
+        gitlab-ctl stop postgresql || true
+    '

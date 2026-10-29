@@ -5,6 +5,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 
+import os
 import sys
 import json
 import agent
@@ -19,9 +20,16 @@ for evar in [
     "LDAP_DOMAIN",
     "GITLAB_REGISTRY_HOST",
     "RUNNER_ENABLED",
-    "GITLAB_INITIAL_PASSWORD",
 ]:
     if evar in original_environment:
         agent.set_env(evar, original_environment[evar])
 
 agent.dump_env()
+
+# Migrate legacy GITLAB_INITIAL_PASSWORD from pre-1.0.5 backups into passwords.env if needed
+if "GITLAB_INITIAL_PASSWORD" in original_environment and not os.path.exists("passwords.env"):
+    agent.write_envfile(
+        "passwords.env",
+        {"GITLAB_INITIAL_PASSWORD": original_environment["GITLAB_INITIAL_PASSWORD"]},
+    )
+    os.chmod("passwords.env", 0o600)

@@ -12,9 +12,9 @@ exec 1>&2
 
 systemctl --user daemon-reload
 
-# Start or restart GitLab Pod and Server
+# Start or restart GitLab Pod and Server explicitly
 systemctl --user enable gitlab.service gitlab-app.service
-systemctl --user restart gitlab.service
+systemctl --user restart gitlab.service gitlab-app.service
 
 if [[ "${RUNNER_ENABLED:-True}" == "True" ]]; then
     systemctl --user enable --now podman.socket
