@@ -14,4 +14,4 @@ cdomain = os.environ.get("LDAP_DOMAIN", "").strip()
 if cdomain:
     agent.bind_user_domains([cdomain])
 else:
-    agent.unbind_user_domains()
+    agent.bind_user_domains([])
