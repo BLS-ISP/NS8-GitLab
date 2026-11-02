@@ -8,11 +8,16 @@
 set -e
 exec 1>&2
 
+../bin/write-config
+
 # Restore GitLab PostgreSQL database from the backup archive created by module-dump-state
 podman run --rm \
     --name gitlab-restore-db \
+    --shm-size=512m \
+    --volume "${PWD}/gitlab.rb:/assets/ns8-gitlab.rb:ro,Z" \
     --volume gitlab-config:/etc/gitlab:Z \
     --volume gitlab-data:/var/opt/gitlab:Z \
+    --volume gitlab-logs:/var/log/gitlab:Z \
     "${GITLAB_CE_IMAGE}" \
     bash -c '
         set -e
@@ -25,17 +30,14 @@ podman run --rm \
         latest_backup="${backups[-1]}"
         backup_id=$(basename "${latest_backup}" _gitlab_backup.tar)
         echo "Restoring GitLab database from backup ${backup_id}..."
+        cp -f /assets/ns8-gitlab.rb /etc/gitlab/gitlab.rb
+        chmod 0600 /etc/gitlab/gitlab.rb
         rm -f /var/opt/gitlab/postgresql/data/postmaster.pid
         /opt/gitlab/embedded/bin/runsvdir-start &
-        sleep 2
-        gitlab-ctl start postgresql
-        for i in $(seq 1 30); do
-            if gitlab-psql -d postgres -c "SELECT 1" >/dev/null 2>&1; then
-                break
-            fi
-            sleep 2
-        done
+        gitlab-ctl reconfigure
+        gitlab-ctl stop puma || true
+        gitlab-ctl stop sidekiq || true
         GITLAB_ASSUME_YES=1 gitlab-backup restore BACKUP="${backup_id}" force=yes
         rm -f /var/opt/gitlab/backups/*_gitlab_backup.tar
-        gitlab-ctl stop postgresql || true
+        gitlab-ctl stop || true
     '

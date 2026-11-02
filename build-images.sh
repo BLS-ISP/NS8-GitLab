@@ -21,7 +21,7 @@ container=$(buildah from scratch)
 # Reuse existing nodebuilder-gitlab container, to speed up builds
 if ! buildah containers --format "{{.ContainerName}}" | grep -q nodebuilder-gitlab; then
     echo "Pulling NodeJS runtime..."
-    buildah from --name nodebuilder-gitlab -v "${PWD}:/usr/src:Z" docker.io/library/node:lts
+    buildah from --name nodebuilder-gitlab -v "${PWD}:/usr/src:Z" docker.io/library/node:22.23.4
 fi
 
 echo "Build static UI files with node..."
@@ -29,14 +29,14 @@ buildah run \
     --workingdir=/usr/src/ui \
     --env="NODE_OPTIONS=--openssl-legacy-provider" \
     nodebuilder-gitlab \
-    sh -c "(command -v corepack >/dev/null || npm install -g corepack) && corepack enable && yarn install && yarn build"
+    sh -c "corepack enable && yarn install && yarn build"
 
 # Add imageroot directory to the container image
 buildah add "${container}" imageroot /imageroot
 buildah add "${container}" ui/dist /ui
 # Setup the entrypoint, ask to reserve three TCP ports with the label and set a rootless container
 buildah config --entrypoint=/ \
-    --label="org.nethserver.authorizations=traefik@any:routeadm cluster:accountconsumer node:fwadm" \
+    --label="org.nethserver.authorizations=traefik@node:routeadm cluster:accountconsumer node:fwadm" \
     --label="org.nethserver.tcp-ports-demand=3" \
     --label="org.nethserver.rootfull=0" \
     --label="org.nethserver.min-core=3.0.0" \

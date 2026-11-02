@@ -39,6 +39,8 @@ jobs:
 
   publish-images:
     uses: NethServer/ns8-github-actions/.github/workflows/publish-branch.yml@v1
+    with:
+      imagetag: ${{ (github.ref_name == 'main' || github.ref_name == 'master') && 'latest' || github.ref_name }}
 
   module:
     needs: [publish-images, create-release]
@@ -63,6 +65,7 @@ jobs:
 
       - name: Generate repodata.json from SemVer tags (NethServer standard)
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REGISTRY_USER: ${{ github.actor }}
           MODULE_OWNER: ${{ needs.module.outputs.owner }}
@@ -72,8 +75,23 @@ jobs:
           sudo apt-get update -q && sudo apt-get install -y -q skopeo jq
           trap 'skopeo logout ghcr.io || true' EXIT
           skopeo login -u "${REGISTRY_USER}" --password-stdin ghcr.io <<<"${REGISTRY_TOKEN}"
-          skopeo delete "docker://ghcr.io/${MODULE_OWNER}/${MODULE_NAME}:19.5.0" 2>/dev/null || true
-          skopeo delete "docker://ghcr.io/${MODULE_OWNER}/${MODULE_NAME}:19.5.1" 2>/dev/null || true
+
+          # Point :latest to the newest stable SemVer release so createrepo.py sees it
+          if [[ "${CURRENT_TAG}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            skopeo copy "docker://ghcr.io/${MODULE_OWNER}/${MODULE_NAME}:${CURRENT_TAG}" "docker://ghcr.io/${MODULE_OWNER}/${MODULE_NAME}:latest"
+          fi
+
+          # Remove stray non-module tags (19.5.0, 19.5.1, main) if present
+          for scope in "orgs/${MODULE_OWNER}" "orgs/BLS-ISP" "users/${MODULE_OWNER}"; do
+            VERSIONS_JSON=$(gh api --paginate "/${scope}/packages/container/${MODULE_NAME}/versions" 2>/dev/null || true)
+            if [ -n "${VERSIONS_JSON}" ] && echo "${VERSIONS_JSON}" | jq -e 'type == "array"' >/dev/null 2>&1; then
+              IDS=$(echo "${VERSIONS_JSON}" | jq -r '.[] | select((.metadata.container.tags // []) | any(. == "19.5.1" or . == "19.5.0" or . == "main")) | select((.metadata.container.tags // []) | all(. != "latest" and (startswith("1.") | not))) | .id')
+              for id in ${IDS}; do
+                echo "Deleting stray package version ID ${id} via /${scope} ..."
+                gh api --method DELETE "/${scope}/packages/container/${MODULE_NAME}/versions/${id}" || true
+              done
+            fi
+          done
 
           python3 - <<'EOF'
           import json

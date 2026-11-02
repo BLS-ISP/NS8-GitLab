@@ -1,0 +1,38 @@
+name: Test Module
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    uses: NethServer/ns8-github-actions/.github/workflows/publish-branch.yml@v1
+    with:
+      imagetag: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || 'latest' }}
+
+  module:
+    needs: build
+    uses: NethServer/ns8-github-actions/.github/workflows/module-info.yml@v1
+
+  test-module:
+    needs: [ build, module ]
+    strategy:
+      matrix:
+        scenario: [ install, update ]
+    uses: NethServer/ns8-github-actions/.github/workflows/test-module-qemu.yml@v1
+    with:
+      RepositoryOwner: ${{ needs.module.outputs.owner }}
+      RepositoryName: ${{ needs.module.outputs.name }}
+      TestImageTag: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || 'latest' }}
+      StableTag: ${{ needs.module.outputs.stable }}
+      SCENARIO: ${{ matrix.scenario }}
+      vm_mem: 8192
+      vm_cpus: 4

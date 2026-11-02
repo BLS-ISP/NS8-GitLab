@@ -22,8 +22,8 @@ env = dict(os.environ)
 if os.path.exists("environment"):
     try:
         env.update(agent.read_envfile("environment"))
-    except Exception:
-        pass
+    except Exception as ex:
+        print(agent.SD_WARNING + f"Failed to read environment file: {ex}", file=sys.stderr)
 
 runner_enabled = env.get("RUNNER_ENABLED", "True") == "True"
 if not runner_enabled:

@@ -1,7 +1,20 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["local>NethServer/.github:ns8-automerge"],
+  "packageRules": [
+    {
+      "matchPackageNames": ["library/node"],
+      "allowedVersions": "<23.0.0"
+    }
+  ],
   "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/build-images.sh/"],
+      "matchStrings": ["docker\\.io/library/node:(?<currentValue>[0-9\\.]+)"],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "library/node"
+    },
     {
       "customType": "regex",
       "managerFilePatterns": ["/build-images.sh/"],

@@ -21,15 +21,15 @@ env = dict(os.environ)
 if os.path.exists("environment"):
     try:
         env.update(agent.read_envfile("environment"))
-    except Exception:
-        pass
+    except Exception as ex:
+        print(agent.SD_WARNING + f"Failed to read environment file: {ex}", file=sys.stderr)
 
 secret_vars = {}
 if os.path.exists("passwords.env"):
     try:
         secret_vars.update(agent.read_envfile("passwords.env"))
-    except Exception:
-        pass
+    except Exception as ex:
+        print(agent.SD_WARNING + f"Failed to read passwords.env file: {ex}", file=sys.stderr)
 
 host = env.get("HOST", "gitlab.local")
 registry_url = env.get("GITLAB_REGISTRY_HOST", "")

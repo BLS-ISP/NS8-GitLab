@@ -17,8 +17,8 @@ env = dict(os.environ)
 if os.path.exists("environment"):
     try:
         env.update(agent.read_envfile("environment"))
-    except Exception:
-        pass
+    except Exception as ex:
+        print(agent.SD_WARNING + f"Failed to read environment file: {ex}", file=sys.stderr)
 
 tcp_ports = [p.strip() for p in env.get("TCP_PORTS", "").split(",") if p.strip()]
 ssh_port = env.get("GITLAB_SSH_PORT") or (tcp_ports[2] if len(tcp_ports) >= 3 else "")
@@ -41,8 +41,8 @@ try:
             "label": key,
             "value": key,
         })
-except Exception:
-    pass
+except Exception as ex:
+    print(agent.SD_WARNING + f"Failed to list LDAP domains: {ex}", file=sys.stderr)
 
 config["ldap_domain_list"] = domains
 

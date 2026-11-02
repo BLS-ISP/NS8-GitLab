@@ -63,8 +63,8 @@ secret_vars = {}
 if os.path.exists(passwords_file):
     try:
         secret_vars.update(agent.read_envfile(passwords_file))
-    except Exception:
-        pass
+    except Exception as ex:
+        print(agent.SD_WARNING + f"Failed to read {passwords_file}: {ex}", file=sys.stderr)
 
 if initial_password:
     secret_vars["GITLAB_INITIAL_PASSWORD"] = initial_password
