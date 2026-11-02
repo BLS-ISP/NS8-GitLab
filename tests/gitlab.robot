@@ -6,7 +6,7 @@ Check if gitlab is installed correctly
     ${output}  ${rc} =    Execute Command    add-module ${IMAGE_URL} 1
     ...    return_rc=True
     Should Be Equal As Integers    ${rc}  0
-    &{output} =    Evaluate    ${output}
+    &{output} =    Evaluate    json.loads($output)    modules=json
     Set Suite Variable    ${module_id}    ${output.module_id}
 
 Check if gitlab can be configured
@@ -18,11 +18,11 @@ Check if gitlab configuration is persisted
     ${output}  ${rc} =    Execute Command    api-cli run module/${module_id}/get-configuration
     ...    return_rc=True
     Should Be Equal As Integers    ${rc}  0
-    &{config} =    Evaluate    ${output}
+    &{config} =    Evaluate    json.loads($output)    modules=json
     Should Be Equal As Strings    ${config.host}    git.example.org
     Should Be Equal As Strings    ${config.registry_host}    registry.example.org
-    Should Be Equal    ${config.runner_enabled}    ${True}
-    Should Be Equal    ${config.configured}    ${True}
+    Should Be True    ${config.runner_enabled}
+    Should Be True    ${config.configured}
 
 Check if gitlab services are started
     ${rc} =    Execute Command    runagent -m ${module_id} systemctl --user is-active gitlab.service gitlab-app.service gitlab-runner.service
