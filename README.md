@@ -32,7 +32,7 @@
    - **URL:** `https://raw.githubusercontent.com/BLS-ISP/ns8-nethforge/repomd/ns8/updates/`
    - **Status:** Enabled
 4. Open **Software center**, find **GitLab**, and click **Install** (you can optionally expand **Configure additional volumes** during installation to place `gitlab-data` on a dedicated disk).
-5. Future module updates published with a newer Semantic Version tag (e.g. `1.0.6`, `1.1.0`) will automatically appear in the **Software center → Updates** view.
+5. Future module updates published with a newer Semantic Version tag (e.g. `1.0.7`, `1.1.0`) will automatically appear in the **Software center → Updates** view.
 
 > **Tip:** To clear the 1-hour repository metadata cache on NS8 and immediately see a newly published release:
 > ```bash
@@ -46,13 +46,13 @@
 Instantiate the module using a **Semantic Version tag** (do not use `:latest` in production, as NS8 skips UI updates for `:latest` development instances):
 
 ```bash
-add-module ghcr.io/bls-isp/gitlab:1.0.6 1
+add-module ghcr.io/bls-isp/gitlab:1.0.7 1
 ```
 
 The output of the command will return the instance name:
 
 ```json
-{"module_id": "gitlab1", "image_name": "gitlab", "image_url": "ghcr.io/bls-isp/gitlab:1.0.6"}
+{"module_id": "gitlab1", "image_name": "gitlab", "image_url": "ghcr.io/bls-isp/gitlab:1.0.7"}
 ```
 
 ---
@@ -142,21 +142,21 @@ api-cli run module/gitlab1/configure-module --data '{
 Updates are normally applied through the **NethServer 8 Software Center UI**. To manually update via CLI:
 
 ```bash
-api-cli run update-module --data '{"module_url":"ghcr.io/bls-isp/gitlab:1.0.6","instances":["gitlab1"]}'
+api-cli run update-module --data '{"module_url":"ghcr.io/bls-isp/gitlab:1.0.7","instances":["gitlab1"]}'
 ```
 
 ---
 
 ## Publishing a New Release (Semantic Versioning)
 
-In accordance with NethServer 8 standards, releases must use pure **Semantic Versioning (`X.Y.Z`) without a `v` prefix** (e.g. `1.0.6`, `1.1.0`, or `1.1.0-testing.1` for pre-releases):
+In accordance with NethServer 8 standards, releases must use pure **Semantic Versioning (`X.Y.Z`) without a `v` prefix** (e.g. `1.0.7`, `1.1.0`, or `1.1.0-testing.1` for pre-releases):
 
 ```bash
-git tag -a 1.0.6 -m "Release 1.0.6"
+git tag -a 1.0.7 -m "Release 1.0.7"
 git push origin main --tags
 ```
 
-The GitHub Actions workflow (`.github/workflows/publish-images.yml`) automatically builds and publishes `ghcr.io/bls-isp/gitlab:1.0.6` and updates `repodata.json` on the `repomd` branch.
+The GitHub Actions workflow (`.github/workflows/publish-images.yml`) automatically builds and publishes `ghcr.io/bls-isp/gitlab:1.0.7` and updates `:latest`.
 
 ---
 
@@ -175,7 +175,7 @@ remove-module --no-preserve gitlab1
 Test the module using the `test-module.sh` script:
 
 ```bash
-./test-module.sh <NODE_ADDR> ghcr.io/bls-isp/gitlab:1.0.6
+./test-module.sh <NODE_ADDR> ghcr.io/bls-isp/gitlab:1.0.7
 ```
 
 ---
