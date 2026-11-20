@@ -1,0 +1,127 @@
+#!/usr/bin/env python3
+
+#
+# Copyright (C) 2024 Nethesis S.r.l.
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+
+import json
+import os
+import sys
+import agent
+import agent.tasks
+
+passwords_file = "passwords.env"
+
+
+def clear_ns8_sso_credentials():
+    agent.unset_env("NS8_SSO_ISSUER")
+    agent.unset_env("NS8_SSO_CLIENT_ID")
+    agent.dump_env()
+    if os.path.exists(passwords_file):
+        try:
+            secret_vars = agent.read_envfile(passwords_file)
+            if "NS8_SSO_CLIENT_SECRET" in secret_vars:
+                secret_vars.pop("NS8_SSO_CLIENT_SECRET", None)
+                agent.write_envfile(passwords_file, secret_vars)
+                os.chmod(passwords_file, 0o600)
+        except Exception as ex:
+            print(agent.SD_WARNING + f"Failed to update {passwords_file}: {ex}", file=sys.stderr)
+
+
+env = dict(os.environ)
+if os.path.exists("environment"):
+    try:
+        env.update(agent.read_envfile("environment"))
+    except Exception as ex:
+        print(agent.SD_WARNING + f"Failed to read environment file: {ex}", file=sys.stderr)
+
+skip_missing_idp = env.get("RESTORE_SKIP_MISSING_IDP") == "1"
+if "RESTORE_SKIP_MISSING_IDP" in os.environ or "RESTORE_SKIP_MISSING_IDP" in env:
+    agent.unset_env("RESTORE_SKIP_MISSING_IDP")
+    agent.dump_env()
+
+sso_enabled = env.get("SSO_ENABLED", "False") == "True"
+ns8_sso_provider = env.get("NS8_SSO_PROVIDER", "").strip()
+ldap_domain = env.get("LDAP_DOMAIN", "").strip()
+host = env.get("HOST", "").strip()
+
+if not sso_enabled or not ns8_sso_provider or not ldap_domain or not host:
+    clear_ns8_sso_credentials()
+    sys.exit(0)
+
+prov_data = {}
+try:
+    rdb = agent.redis_connect(use_replica=True)
+    prov_data = rdb.hgetall(f"module/{ns8_sso_provider}/srv/http/oidc") or {}
+except Exception as ex:
+    print(agent.SD_WARNING + f"Failed to query OIDC provider '{ns8_sso_provider}' in Redis: {ex}", file=sys.stderr)
+
+if not prov_data or not (prov_data.get("host") or prov_data.get("issuer_url_prefix")):
+    if skip_missing_idp:
+        print(
+            agent.SD_WARNING
+            + f"NS8 OIDC provider '{ns8_sso_provider}' is not available during restore; clearing runtime NS8 SSO credentials",
+            file=sys.stderr,
+        )
+        clear_ns8_sso_credentials()
+        sys.exit(0)
+
+response = agent.tasks.run(
+    agent_id=f"module/{ns8_sso_provider}",
+    action="register-client",
+    data={
+        "domain": ldap_domain,
+        "redirect_uris": [f"https://{host}/users/auth/openid_connect_ns8/callback"],
+        "post_logout_redirect_uris": [f"https://{host}/"],
+    },
+)
+
+if response["exit_code"] != 0:
+    if skip_missing_idp:
+        print(
+            agent.SD_WARNING
+            + f"register-client on '{ns8_sso_provider}' failed during restore (exit {response['exit_code']}); clearing runtime NS8 SSO credentials",
+            file=sys.stderr,
+        )
+        clear_ns8_sso_credentials()
+        sys.exit(0)
+    agent.assert_exp(response["exit_code"] == 0, f"Failed to register OIDC client on {ns8_sso_provider}")
+
+raw_output = response.get("output") or {}
+if isinstance(raw_output, str):
+    try:
+        raw_output = json.loads(raw_output) if raw_output.strip() else {}
+    except Exception as ex:
+        print(agent.SD_WARNING + f"Failed to decode register-client JSON output: {ex}", file=sys.stderr)
+        raw_output = {}
+
+client_id = str(raw_output.get("client_id") or env.get("MODULE_ID", "")).strip()
+client_secret = str(raw_output.get("client_secret") or "").replace("\r", "").replace("\n", "").strip()
+issuer = str(
+    raw_output.get("issuer")
+    or raw_output.get("issuer_url")
+    or prov_data.get("issuer_url")
+    or prov_data.get("issuer_url_prefix")
+    or (f"https://{prov_data['host']}" if prov_data.get("host") else "")
+).strip()
+
+agent.assert_exp(
+    bool(client_id and client_secret and issuer),
+    f"Incomplete OIDC credentials returned by {ns8_sso_provider}",
+)
+
+secret_vars = {}
+if os.path.exists(passwords_file):
+    try:
+        secret_vars.update(agent.read_envfile(passwords_file))
+    except Exception as ex:
+        print(agent.SD_WARNING + f"Failed to read {passwords_file}: {ex}", file=sys.stderr)
+
+secret_vars["NS8_SSO_CLIENT_SECRET"] = client_secret
+agent.write_envfile(passwords_file, secret_vars)
+os.chmod(passwords_file, 0o600)
+
+agent.set_env("NS8_SSO_CLIENT_ID", client_id)
+agent.set_env("NS8_SSO_ISSUER", issuer)
+agent.dump_env()

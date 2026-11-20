@@ -32,7 +32,66 @@
         "registry_host",
         "runner_enabled",
         "ssh_port",
-        "configured"
+        "configured",
+        "sso_enabled",
+        "sso_allow_single_sign_on",
+        "sso_block_auto_created_users",
+        "sso_allow_bypass_two_factor",
+        "sso_auto_link_user",
+        "sso_auto_link_ldap_user",
+        "sso_auto_link_saml_user",
+        "sso_sync_profile",
+        "sso_auto_sign_in_provider",
+        "custom_ca_cert_set",
+        "ns8_sso_provider",
+        "ns8_sso_label",
+        "sso_providers_list",
+        "oidc_enabled",
+        "oidc_label",
+        "oidc_issuer",
+        "oidc_client_id",
+        "oidc_client_secret_set",
+        "oidc_pkce",
+        "oidc_uid_field",
+        "oidc_scopes",
+        "oidc_client_auth_method",
+        "saml_enabled",
+        "saml_label",
+        "saml_idp_sso_target_url",
+        "saml_idp_slo_target_url",
+        "saml_issuer",
+        "saml_idp_cert_fingerprint",
+        "saml_idp_cert_set",
+        "saml_name_identifier_format",
+        "azure_enabled",
+        "azure_label",
+        "azure_client_id",
+        "azure_client_secret_set",
+        "azure_tenant_id",
+        "github_enabled",
+        "github_label",
+        "github_app_id",
+        "github_app_secret_set",
+        "github_url",
+        "gitlab_oauth_enabled",
+        "gitlab_oauth_label",
+        "gitlab_oauth_app_id",
+        "gitlab_oauth_app_secret_set",
+        "gitlab_oauth_url",
+        "google_enabled",
+        "google_label",
+        "google_client_id",
+        "google_client_secret_set",
+        "oauth2_generic_enabled",
+        "oauth2_generic_label",
+        "oauth2_generic_app_id",
+        "oauth2_generic_app_secret_set",
+        "oauth2_generic_site",
+        "oauth2_generic_authorize_url",
+        "oauth2_generic_token_url",
+        "oauth2_generic_user_info_url",
+        "oauth2_generic_uid_field",
+        "custom_gitlab_rb"
     ],
     "properties": {
         "host": {
@@ -89,6 +148,232 @@
         "configured": {
             "type": "boolean",
             "description": "Whether the module has been configured at least once"
+        },
+        "sso_enabled": {
+            "type": "boolean"
+        },
+        "sso_allow_single_sign_on": {
+            "type": "boolean"
+        },
+        "sso_block_auto_created_users": {
+            "type": "boolean"
+        },
+        "sso_allow_bypass_two_factor": {
+            "type": "boolean"
+        },
+        "sso_auto_link_user": {
+            "type": "boolean"
+        },
+        "sso_auto_link_ldap_user": {
+            "type": "boolean"
+        },
+        "sso_auto_link_saml_user": {
+            "type": "boolean"
+        },
+        "sso_sync_profile": {
+            "type": "boolean"
+        },
+        "sso_auto_sign_in_provider": {
+            "type": "string",
+            "enum": [
+                "",
+                "openid_connect_ns8",
+                "openid_connect",
+                "saml",
+                "azure_activedirectory_v2",
+                "github",
+                "gitlab",
+                "google_oauth2",
+                "oauth2_generic"
+            ]
+        },
+        "custom_ca_cert_set": {
+            "type": "boolean"
+        },
+        "ns8_sso_provider": {
+            "type": "string"
+        },
+        "ns8_sso_label": {
+            "type": "string"
+        },
+        "sso_providers_list": {
+            "type": "array",
+            "description": "Available NethServer 8 OIDC service providers",
+            "items": {
+                "type": "object",
+                "required": [
+                    "name",
+                    "label",
+                    "value",
+                    "host",
+                    "domain",
+                    "issuer_url_prefix"
+                ],
+                "properties": {
+                    "name": {
+                        "type": "string"
+                    },
+                    "label": {
+                        "type": "string"
+                    },
+                    "value": {
+                        "type": "string"
+                    },
+                    "host": {
+                        "type": "string"
+                    },
+                    "domain": {
+                        "type": "string"
+                    },
+                    "issuer_url_prefix": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "oidc_enabled": {
+            "type": "boolean"
+        },
+        "oidc_label": {
+            "type": "string"
+        },
+        "oidc_issuer": {
+            "type": "string"
+        },
+        "oidc_client_id": {
+            "type": "string"
+        },
+        "oidc_client_secret_set": {
+            "type": "boolean"
+        },
+        "oidc_pkce": {
+            "type": "boolean"
+        },
+        "oidc_uid_field": {
+            "type": "string"
+        },
+        "oidc_scopes": {
+            "type": "string"
+        },
+        "oidc_client_auth_method": {
+            "type": "string",
+            "enum": [
+                "basic",
+                "query",
+                "jwt_bearer",
+                "mtls"
+            ]
+        },
+        "saml_enabled": {
+            "type": "boolean"
+        },
+        "saml_label": {
+            "type": "string"
+        },
+        "saml_idp_sso_target_url": {
+            "type": "string"
+        },
+        "saml_idp_slo_target_url": {
+            "type": "string"
+        },
+        "saml_issuer": {
+            "type": "string"
+        },
+        "saml_idp_cert_fingerprint": {
+            "type": "string"
+        },
+        "saml_idp_cert_set": {
+            "type": "boolean"
+        },
+        "saml_name_identifier_format": {
+            "type": "string"
+        },
+        "azure_enabled": {
+            "type": "boolean"
+        },
+        "azure_label": {
+            "type": "string"
+        },
+        "azure_client_id": {
+            "type": "string"
+        },
+        "azure_client_secret_set": {
+            "type": "boolean"
+        },
+        "azure_tenant_id": {
+            "type": "string"
+        },
+        "github_enabled": {
+            "type": "boolean"
+        },
+        "github_label": {
+            "type": "string"
+        },
+        "github_app_id": {
+            "type": "string"
+        },
+        "github_app_secret_set": {
+            "type": "boolean"
+        },
+        "github_url": {
+            "type": "string"
+        },
+        "gitlab_oauth_enabled": {
+            "type": "boolean"
+        },
+        "gitlab_oauth_label": {
+            "type": "string"
+        },
+        "gitlab_oauth_app_id": {
+            "type": "string"
+        },
+        "gitlab_oauth_app_secret_set": {
+            "type": "boolean"
+        },
+        "gitlab_oauth_url": {
+            "type": "string"
+        },
+        "google_enabled": {
+            "type": "boolean"
+        },
+        "google_label": {
+            "type": "string"
+        },
+        "google_client_id": {
+            "type": "string"
+        },
+        "google_client_secret_set": {
+            "type": "boolean"
+        },
+        "oauth2_generic_enabled": {
+            "type": "boolean"
+        },
+        "oauth2_generic_label": {
+            "type": "string"
+        },
+        "oauth2_generic_app_id": {
+            "type": "string"
+        },
+        "oauth2_generic_app_secret_set": {
+            "type": "boolean"
+        },
+        "oauth2_generic_site": {
+            "type": "string"
+        },
+        "oauth2_generic_authorize_url": {
+            "type": "string"
+        },
+        "oauth2_generic_token_url": {
+            "type": "string"
+        },
+        "oauth2_generic_user_info_url": {
+            "type": "string"
+        },
+        "oauth2_generic_uid_field": {
+            "type": "string"
+        },
+        "custom_gitlab_rb": {
+            "type": "string"
         }
     }
 }
