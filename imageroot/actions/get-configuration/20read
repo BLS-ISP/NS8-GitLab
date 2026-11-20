@@ -6,10 +6,29 @@
 #
 
 import json
-import sys
 import os
+import sys
 import agent
 from agent.ldapproxy import Ldapproxy
+
+ALLOWED_AUTO_SIGN_IN_PROVIDERS = {
+    "",
+    "openid_connect_ns8",
+    "openid_connect",
+    "saml",
+    "azure_activedirectory_v2",
+    "github",
+    "gitlab",
+    "google_oauth2",
+    "oauth2_generic",
+}
+
+ALLOWED_OIDC_AUTH_METHODS = {
+    "basic",
+    "query",
+    "jwt_bearer",
+    "mtls",
+}
 
 config = {}
 
@@ -19,6 +38,13 @@ if os.path.exists("environment"):
         env.update(agent.read_envfile("environment"))
     except Exception as ex:
         print(agent.SD_WARNING + f"Failed to read environment file: {ex}", file=sys.stderr)
+
+secret_vars = {}
+if os.path.exists("passwords.env"):
+    try:
+        secret_vars.update(agent.read_envfile("passwords.env"))
+    except Exception as ex:
+        print(agent.SD_WARNING + f"Failed to read passwords.env file: {ex}", file=sys.stderr)
 
 tcp_ports = [p.strip() for p in env.get("TCP_PORTS", "").split(",") if p.strip()]
 ssh_port = env.get("GITLAB_SSH_PORT") or (tcp_ports[2] if len(tcp_ports) >= 3 else "")
@@ -31,6 +57,95 @@ config["registry_host"] = env.get("GITLAB_REGISTRY_HOST", "")
 config["runner_enabled"] = env.get("RUNNER_ENABLED", "True") == "True"
 config["ssh_port"] = ssh_port
 config["configured"] = bool(config["host"])
+
+# Global SSO fields
+config["sso_enabled"] = env.get("SSO_ENABLED", "False") == "True"
+config["sso_allow_single_sign_on"] = env.get("SSO_ALLOW_SINGLE_SIGN_ON", "True") == "True"
+config["sso_block_auto_created_users"] = env.get("SSO_BLOCK_AUTO_CREATED_USERS", "False") == "True"
+config["sso_allow_bypass_two_factor"] = env.get("SSO_ALLOW_BYPASS_TWO_FACTOR", "True") == "True"
+config["sso_auto_link_user"] = env.get("SSO_AUTO_LINK_USER", "True") == "True"
+config["sso_auto_link_ldap_user"] = env.get("SSO_AUTO_LINK_LDAP_USER", "True") == "True"
+config["sso_auto_link_saml_user"] = env.get("SSO_AUTO_LINK_SAML_USER", "True") == "True"
+config["sso_sync_profile"] = env.get("SSO_SYNC_PROFILE", "True") == "True"
+auto_sign_in = env.get("SSO_AUTO_SIGN_IN_PROVIDER", "")
+config["sso_auto_sign_in_provider"] = auto_sign_in if auto_sign_in in ALLOWED_AUTO_SIGN_IN_PROVIDERS else ""
+config["custom_ca_cert_set"] = bool(secret_vars.get("CUSTOM_CA_CERT_B64"))
+
+# NS8 Cluster SSO
+config["ns8_sso_provider"] = env.get("NS8_SSO_PROVIDER", "")
+config["ns8_sso_label"] = env.get("NS8_SSO_LABEL") or "Single Sign-On"
+
+# External OpenID Connect
+config["oidc_enabled"] = env.get("OIDC_ENABLED", "False") == "True"
+config["oidc_label"] = env.get("OIDC_LABEL") or "OpenID Connect"
+config["oidc_issuer"] = env.get("OIDC_ISSUER", "")
+config["oidc_client_id"] = env.get("OIDC_CLIENT_ID", "")
+config["oidc_client_secret_set"] = bool(secret_vars.get("OIDC_CLIENT_SECRET"))
+config["oidc_pkce"] = env.get("OIDC_PKCE", "True") == "True"
+config["oidc_uid_field"] = env.get("OIDC_UID_FIELD") or "preferred_username"
+config["oidc_scopes"] = env.get("OIDC_SCOPES") or "openid,profile,email"
+oidc_auth_method = env.get("OIDC_CLIENT_AUTH_METHOD") or "basic"
+config["oidc_client_auth_method"] = oidc_auth_method if oidc_auth_method in ALLOWED_OIDC_AUTH_METHODS else "basic"
+
+# SAML 2.0
+config["saml_enabled"] = env.get("SAML_ENABLED", "False") == "True"
+config["saml_label"] = env.get("SAML_LABEL") or "SAML 2.0"
+config["saml_idp_sso_target_url"] = env.get("SAML_IDP_SSO_TARGET_URL", "")
+config["saml_idp_slo_target_url"] = env.get("SAML_IDP_SLO_TARGET_URL", "")
+config["saml_issuer"] = env.get("SAML_ISSUER", "")
+config["saml_idp_cert_fingerprint"] = env.get("SAML_IDP_CERT_FINGERPRINT", "")
+config["saml_idp_cert_set"] = bool(secret_vars.get("SAML_IDP_CERT_B64"))
+config["saml_name_identifier_format"] = (
+    env.get("SAML_NAME_IDENTIFIER_FORMAT") or "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent"
+)
+
+# Microsoft Entra ID
+config["azure_enabled"] = env.get("AZURE_ENABLED", "False") == "True"
+config["azure_label"] = env.get("AZURE_LABEL") or "Microsoft Entra ID"
+config["azure_client_id"] = env.get("AZURE_CLIENT_ID", "")
+config["azure_client_secret_set"] = bool(secret_vars.get("AZURE_CLIENT_SECRET"))
+config["azure_tenant_id"] = env.get("AZURE_TENANT_ID", "")
+
+# GitHub
+config["github_enabled"] = env.get("GITHUB_ENABLED", "False") == "True"
+config["github_label"] = env.get("GITHUB_LABEL") or "GitHub"
+config["github_app_id"] = env.get("GITHUB_APP_ID", "")
+config["github_app_secret_set"] = bool(secret_vars.get("GITHUB_APP_SECRET"))
+config["github_url"] = env.get("GITHUB_URL", "")
+
+# External GitLab
+config["gitlab_oauth_enabled"] = env.get("GITLAB_OAUTH_ENABLED", "False") == "True"
+config["gitlab_oauth_label"] = env.get("GITLAB_OAUTH_LABEL") or "GitLab.com"
+config["gitlab_oauth_app_id"] = env.get("GITLAB_OAUTH_APP_ID", "")
+config["gitlab_oauth_app_secret_set"] = bool(secret_vars.get("GITLAB_OAUTH_APP_SECRET"))
+config["gitlab_oauth_url"] = env.get("GITLAB_OAUTH_URL", "")
+
+# Google
+config["google_enabled"] = env.get("GOOGLE_ENABLED", "False") == "True"
+config["google_label"] = env.get("GOOGLE_LABEL") or "Google"
+config["google_client_id"] = env.get("GOOGLE_CLIENT_ID", "")
+config["google_client_secret_set"] = bool(secret_vars.get("GOOGLE_CLIENT_SECRET"))
+
+# Generic OAuth2
+config["oauth2_generic_enabled"] = env.get("OAUTH2_GENERIC_ENABLED", "False") == "True"
+config["oauth2_generic_label"] = env.get("OAUTH2_GENERIC_LABEL") or "OAuth2"
+config["oauth2_generic_app_id"] = env.get("OAUTH2_GENERIC_APP_ID", "")
+config["oauth2_generic_app_secret_set"] = bool(secret_vars.get("OAUTH2_GENERIC_APP_SECRET"))
+config["oauth2_generic_site"] = env.get("OAUTH2_GENERIC_SITE", "")
+config["oauth2_generic_authorize_url"] = env.get("OAUTH2_GENERIC_AUTHORIZE_URL") or "/oauth2/v1/authorize"
+config["oauth2_generic_token_url"] = env.get("OAUTH2_GENERIC_TOKEN_URL") or "/oauth2/v1/token"
+config["oauth2_generic_user_info_url"] = env.get("OAUTH2_GENERIC_USER_INFO_URL") or "/oauth2/v1/userinfo"
+config["oauth2_generic_uid_field"] = env.get("OAUTH2_GENERIC_UID_FIELD") or "sub"
+
+# Custom Omnibus Ruby configuration
+custom_gitlab_rb = ""
+if os.path.exists("gitlab-custom.rb"):
+    try:
+        with open("gitlab-custom.rb", "r", encoding="utf-8") as cfile:
+            custom_gitlab_rb = cfile.read().replace("\r\n", "\n").replace("\r", "\n")
+    except Exception as ex:
+        print(agent.SD_WARNING + f"Failed to read gitlab-custom.rb: {ex}", file=sys.stderr)
+config["custom_gitlab_rb"] = custom_gitlab_rb
 
 domains = []
 try:
@@ -45,5 +160,38 @@ except Exception as ex:
     print(agent.SD_WARNING + f"Failed to list LDAP domains: {ex}", file=sys.stderr)
 
 config["ldap_domain_list"] = domains
+
+sso_providers = []
+try:
+    rdb = agent.redis_connect(use_replica=True)
+    for prov in agent.list_service_providers(rdb, "oidc", "http"):
+        module_id = str(prov.get("module_id") or "").strip()
+        if not module_id:
+            continue
+        ui_name = str(prov.get("ui_name") or "").strip()
+        prov_host = str(prov.get("host") or "").strip()
+        prov_domain = str(prov.get("domain") or "").strip()
+        issuer_url_prefix = str(prov.get("issuer_url_prefix") or "").strip()
+        if ui_name and prov_host:
+            label = f"{ui_name} ({module_id} - {prov_host})"
+        elif ui_name:
+            label = f"{ui_name} ({module_id})"
+        elif prov_host:
+            label = f"{module_id} ({prov_host})"
+        else:
+            label = module_id
+        sso_providers.append({
+            "name": module_id,
+            "label": label,
+            "value": module_id,
+            "host": prov_host,
+            "domain": prov_domain,
+            "issuer_url_prefix": issuer_url_prefix,
+        })
+    sso_providers.sort(key=lambda item: item["value"])
+except Exception as ex:
+    print(agent.SD_WARNING + f"Failed to list OIDC service providers: {ex}", file=sys.stderr)
+
+config["sso_providers_list"] = sso_providers
 
 json.dump(config, fp=sys.stdout)

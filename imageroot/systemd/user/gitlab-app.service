@@ -25,8 +25,10 @@ ExecStart=/usr/bin/podman run \
     --cgroups=no-conmon \
     --pod-id-file %t/gitlab.pod-id \
     --replace \
-    --env GITLAB_PRE_RECONFIGURE_SCRIPT="cp -f /assets/ns8-gitlab.rb /etc/gitlab/gitlab.rb && chmod 0600 /etc/gitlab/gitlab.rb" \
+    --env GITLAB_PRE_RECONFIGURE_SCRIPT="cp -f /assets/ns8-gitlab.rb /etc/gitlab/gitlab.rb && chmod 0600 /etc/gitlab/gitlab.rb && cp -f /assets/ns8-gitlab-custom.rb /etc/gitlab/gitlab-custom.rb && chmod 0600 /etc/gitlab/gitlab-custom.rb && mkdir -p /etc/gitlab/trusted-certs && if [ -s /assets/ns8-trusted-certs/ns8-custom-ca.crt ]; then cp -f /assets/ns8-trusted-certs/ns8-custom-ca.crt /etc/gitlab/trusted-certs/ns8-custom-ca.crt && chmod 0644 /etc/gitlab/trusted-certs/ns8-custom-ca.crt; else rm -f /etc/gitlab/trusted-certs/ns8-custom-ca.crt; fi" \
     --volume %S/state/gitlab.rb:/assets/ns8-gitlab.rb:ro,Z \
+    --volume %S/state/gitlab-custom.rb:/assets/ns8-gitlab-custom.rb:ro,Z \
+    --volume %S/state/trusted-certs:/assets/ns8-trusted-certs:ro,Z \
     --volume gitlab-config:/etc/gitlab:Z \
     --volume gitlab-data:/var/opt/gitlab:Z \
     --volume gitlab-logs:/var/log/gitlab:Z \

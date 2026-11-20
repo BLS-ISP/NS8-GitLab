@@ -5,9 +5,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 
+import json
 import os
 import sys
-import json
 import agent
 
 request = json.load(sys.stdin)
@@ -20,6 +20,55 @@ for evar in [
     "LDAP_DOMAIN",
     "GITLAB_REGISTRY_HOST",
     "RUNNER_ENABLED",
+    "SSO_ENABLED",
+    "SSO_ALLOW_SINGLE_SIGN_ON",
+    "SSO_BLOCK_AUTO_CREATED_USERS",
+    "SSO_ALLOW_BYPASS_TWO_FACTOR",
+    "SSO_AUTO_LINK_USER",
+    "SSO_AUTO_LINK_LDAP_USER",
+    "SSO_AUTO_LINK_SAML_USER",
+    "SSO_SYNC_PROFILE",
+    "SSO_AUTO_SIGN_IN_PROVIDER",
+    "NS8_SSO_PROVIDER",
+    "NS8_SSO_LABEL",
+    "OIDC_ENABLED",
+    "OIDC_LABEL",
+    "OIDC_ISSUER",
+    "OIDC_CLIENT_ID",
+    "OIDC_PKCE",
+    "OIDC_UID_FIELD",
+    "OIDC_SCOPES",
+    "OIDC_CLIENT_AUTH_METHOD",
+    "SAML_ENABLED",
+    "SAML_LABEL",
+    "SAML_IDP_SSO_TARGET_URL",
+    "SAML_IDP_SLO_TARGET_URL",
+    "SAML_ISSUER",
+    "SAML_IDP_CERT_FINGERPRINT",
+    "SAML_NAME_IDENTIFIER_FORMAT",
+    "AZURE_ENABLED",
+    "AZURE_LABEL",
+    "AZURE_CLIENT_ID",
+    "AZURE_TENANT_ID",
+    "GITHUB_ENABLED",
+    "GITHUB_LABEL",
+    "GITHUB_APP_ID",
+    "GITHUB_URL",
+    "GITLAB_OAUTH_ENABLED",
+    "GITLAB_OAUTH_LABEL",
+    "GITLAB_OAUTH_APP_ID",
+    "GITLAB_OAUTH_URL",
+    "GOOGLE_ENABLED",
+    "GOOGLE_LABEL",
+    "GOOGLE_CLIENT_ID",
+    "OAUTH2_GENERIC_ENABLED",
+    "OAUTH2_GENERIC_LABEL",
+    "OAUTH2_GENERIC_APP_ID",
+    "OAUTH2_GENERIC_SITE",
+    "OAUTH2_GENERIC_AUTHORIZE_URL",
+    "OAUTH2_GENERIC_TOKEN_URL",
+    "OAUTH2_GENERIC_USER_INFO_URL",
+    "OAUTH2_GENERIC_UID_FIELD",
 ]:
     if evar in original_environment:
         agent.set_env(evar, original_environment[evar])

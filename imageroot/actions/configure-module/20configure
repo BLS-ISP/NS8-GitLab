@@ -5,58 +5,41 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 
+import base64
 import json
-import sys
 import os
 import secrets
+import sys
 import agent
 import agent.tasks
 
+ALLOWED_AUTO_SIGN_IN_PROVIDERS = {
+    "",
+    "openid_connect_ns8",
+    "openid_connect",
+    "saml",
+    "azure_activedirectory_v2",
+    "github",
+    "gitlab",
+    "google_oauth2",
+    "oauth2_generic",
+}
+
+ALLOWED_OIDC_AUTH_METHODS = {
+    "basic",
+    "query",
+    "jwt_bearer",
+    "mtls",
+}
+
 data = json.load(sys.stdin)
 
-host = (data.get("host") or "").strip()
-ldap_domain = (data.get("ldap_domain") or "").strip()
-registry_host = (data.get("registry_host") or "").strip()
-initial_password = (data.get("password") or "").strip()
-http2https = bool(data.get("http2https", True))
-lets_encrypt = bool(data.get("lets_encrypt", False))
-runner_enabled = bool(data.get("runner_enabled", True))
-
-tcp_ports = [p.strip() for p in os.environ.get("TCP_PORTS", "").split(",") if p.strip()]
-server_port = tcp_ports[0] if len(tcp_ports) >= 1 else os.environ.get("GITLAB_NGINX_PORT", "20000")
-registry_port = tcp_ports[1] if len(tcp_ports) >= 2 else os.environ.get("GITLAB_REGISTRY_PORT", "20001")
-ssh_port = tcp_ports[2] if len(tcp_ports) >= 3 else os.environ.get("GITLAB_SSH_PORT", "20002")
-
-validation_errors = []
-
-if host and registry_host and host.lower() == registry_host.lower():
-    validation_errors.append({
-        "field": "registry_host",
-        "parameter": "registry_host",
-        "value": registry_host,
-        "error": "registry_host_must_differ_from_host",
-    })
-
-if (not os.environ.get("HOST") or host != os.environ.get("HOST")) and agent.http_route_in_use(domain=host):
-    validation_errors.append({
-        "field": "host",
-        "parameter": "host",
-        "value": host,
-        "error": "domain_already_used_in_traefik",
-    })
-
-if registry_host and (not os.environ.get("GITLAB_REGISTRY_HOST") or registry_host != os.environ.get("GITLAB_REGISTRY_HOST")) and agent.http_route_in_use(domain=registry_host):
-    validation_errors.append({
-        "field": "registry_host",
-        "parameter": "registry_host",
-        "value": registry_host,
-        "error": "domain_already_used_in_traefik",
-    })
-
-if validation_errors:
-    agent.set_status("validation-failed")
-    json.dump(validation_errors, fp=sys.stdout)
-    sys.exit(2)
+cur_env = dict(os.environ)
+if os.path.exists("environment"):
+    try:
+        cur_env.update(agent.read_envfile("environment"))
+    except Exception as ex:
+        print(agent.SD_WARNING + f"Failed to read environment file: {ex}", file=sys.stderr)
 
 passwords_file = "passwords.env"
 secret_vars = {}
@@ -66,13 +49,333 @@ if os.path.exists(passwords_file):
     except Exception as ex:
         print(agent.SD_WARNING + f"Failed to read {passwords_file}: {ex}", file=sys.stderr)
 
+
+def get_bool(key, env_key, default):
+    if key in data and data[key] is not None:
+        return bool(data[key])
+    if env_key in cur_env:
+        return cur_env[env_key] == "True"
+    return default
+
+
+def get_str(key, env_key, default="", fallback_if_empty=False):
+    if key in data and data[key] is not None:
+        val = str(data[key]).strip()
+    elif env_key in cur_env:
+        val = str(cur_env[env_key]).strip()
+    else:
+        val = default
+    if fallback_if_empty and not val:
+        return default
+    return val
+
+
+def clean_secret(val):
+    return str(val or "").replace("\r", "").replace("\n", "").strip()
+
+
+def encode_pem_b64(pem_str):
+    normalized = str(pem_str).replace("\r\n", "\n").replace("\r", "\n").strip() + "\n"
+    return base64.b64encode(normalized.encode("utf-8")).decode("ascii")
+
+
+host = (data.get("host") or "").strip()
+ldap_domain = get_str("ldap_domain", "LDAP_DOMAIN", "")
+registry_host = get_str("registry_host", "GITLAB_REGISTRY_HOST", "")
+initial_password = clean_secret(data.get("password"))
+http2https = get_bool("http2https", "HTTP2HTTPS", True)
+lets_encrypt = get_bool("lets_encrypt", "LETS_ENCRYPT", False)
+runner_enabled = get_bool("runner_enabled", "RUNNER_ENABLED", True)
+
+# Global SSO fields
+sso_enabled = get_bool("sso_enabled", "SSO_ENABLED", False)
+sso_allow_single_sign_on = get_bool("sso_allow_single_sign_on", "SSO_ALLOW_SINGLE_SIGN_ON", True)
+sso_block_auto_created_users = get_bool("sso_block_auto_created_users", "SSO_BLOCK_AUTO_CREATED_USERS", False)
+sso_allow_bypass_two_factor = get_bool("sso_allow_bypass_two_factor", "SSO_ALLOW_BYPASS_TWO_FACTOR", True)
+sso_auto_link_user = get_bool("sso_auto_link_user", "SSO_AUTO_LINK_USER", True)
+sso_auto_link_ldap_user = get_bool("sso_auto_link_ldap_user", "SSO_AUTO_LINK_LDAP_USER", True)
+sso_auto_link_saml_user = get_bool("sso_auto_link_saml_user", "SSO_AUTO_LINK_SAML_USER", True)
+sso_sync_profile = get_bool("sso_sync_profile", "SSO_SYNC_PROFILE", True)
+sso_auto_sign_in_provider = get_str("sso_auto_sign_in_provider", "SSO_AUTO_SIGN_IN_PROVIDER", "")
+if sso_auto_sign_in_provider not in ALLOWED_AUTO_SIGN_IN_PROVIDERS:
+    sso_auto_sign_in_provider = ""
+
+clear_custom_ca_cert = bool(data.get("clear_custom_ca_cert", False))
+custom_ca_cert_in = (data.get("custom_ca_cert") or "").strip()
+effective_custom_ca_b64 = "" if clear_custom_ca_cert else secret_vars.get("CUSTOM_CA_CERT_B64", "")
+if custom_ca_cert_in:
+    effective_custom_ca_b64 = encode_pem_b64(custom_ca_cert_in)
+
+# NS8 Cluster SSO (openid_connect_ns8)
+ns8_sso_provider = get_str("ns8_sso_provider", "NS8_SSO_PROVIDER", "")
+ns8_sso_label = get_str("ns8_sso_label", "NS8_SSO_LABEL", "Single Sign-On", fallback_if_empty=True)
+
+# External OpenID Connect (openid_connect)
+oidc_enabled = get_bool("oidc_enabled", "OIDC_ENABLED", False)
+oidc_label = get_str("oidc_label", "OIDC_LABEL", "OpenID Connect", fallback_if_empty=True)
+oidc_issuer = get_str("oidc_issuer", "OIDC_ISSUER", "")
+oidc_client_id = get_str("oidc_client_id", "OIDC_CLIENT_ID", "")
+oidc_client_secret_in = clean_secret(data.get("oidc_client_secret"))
+effective_oidc_secret = oidc_client_secret_in or secret_vars.get("OIDC_CLIENT_SECRET", "")
+oidc_pkce = get_bool("oidc_pkce", "OIDC_PKCE", True)
+oidc_uid_field = get_str("oidc_uid_field", "OIDC_UID_FIELD", "preferred_username", fallback_if_empty=True)
+oidc_scopes = get_str("oidc_scopes", "OIDC_SCOPES", "openid,profile,email", fallback_if_empty=True)
+oidc_client_auth_method = get_str("oidc_client_auth_method", "OIDC_CLIENT_AUTH_METHOD", "basic", fallback_if_empty=True)
+if oidc_client_auth_method not in ALLOWED_OIDC_AUTH_METHODS:
+    oidc_client_auth_method = "basic"
+
+# SAML 2.0 (saml)
+saml_enabled = get_bool("saml_enabled", "SAML_ENABLED", False)
+saml_label = get_str("saml_label", "SAML_LABEL", "SAML 2.0", fallback_if_empty=True)
+saml_idp_sso_target_url = get_str("saml_idp_sso_target_url", "SAML_IDP_SSO_TARGET_URL", "")
+saml_idp_slo_target_url = get_str("saml_idp_slo_target_url", "SAML_IDP_SLO_TARGET_URL", "")
+saml_issuer = get_str("saml_issuer", "SAML_ISSUER", "")
+saml_idp_cert_fingerprint = get_str("saml_idp_cert_fingerprint", "SAML_IDP_CERT_FINGERPRINT", "")
+clear_saml_idp_cert = bool(data.get("clear_saml_idp_cert", False))
+saml_idp_cert_in = (data.get("saml_idp_cert") or "").strip()
+effective_saml_cert_b64 = "" if clear_saml_idp_cert else secret_vars.get("SAML_IDP_CERT_B64", "")
+if saml_idp_cert_in:
+    effective_saml_cert_b64 = encode_pem_b64(saml_idp_cert_in)
+saml_name_identifier_format = get_str(
+    "saml_name_identifier_format",
+    "SAML_NAME_IDENTIFIER_FORMAT",
+    "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent",
+    fallback_if_empty=True,
+)
+
+# Microsoft Entra ID (azure_activedirectory_v2)
+azure_enabled = get_bool("azure_enabled", "AZURE_ENABLED", False)
+azure_label = get_str("azure_label", "AZURE_LABEL", "Microsoft Entra ID", fallback_if_empty=True)
+azure_client_id = get_str("azure_client_id", "AZURE_CLIENT_ID", "")
+azure_client_secret_in = clean_secret(data.get("azure_client_secret"))
+effective_azure_secret = azure_client_secret_in or secret_vars.get("AZURE_CLIENT_SECRET", "")
+azure_tenant_id = get_str("azure_tenant_id", "AZURE_TENANT_ID", "")
+
+# GitHub (github)
+github_enabled = get_bool("github_enabled", "GITHUB_ENABLED", False)
+github_label = get_str("github_label", "GITHUB_LABEL", "GitHub", fallback_if_empty=True)
+github_app_id = get_str("github_app_id", "GITHUB_APP_ID", "")
+github_app_secret_in = clean_secret(data.get("github_app_secret"))
+effective_github_secret = github_app_secret_in or secret_vars.get("GITHUB_APP_SECRET", "")
+github_url = get_str("github_url", "GITHUB_URL", "")
+
+# External GitLab (gitlab)
+gitlab_oauth_enabled = get_bool("gitlab_oauth_enabled", "GITLAB_OAUTH_ENABLED", False)
+gitlab_oauth_label = get_str("gitlab_oauth_label", "GITLAB_OAUTH_LABEL", "GitLab.com", fallback_if_empty=True)
+gitlab_oauth_app_id = get_str("gitlab_oauth_app_id", "GITLAB_OAUTH_APP_ID", "")
+gitlab_oauth_app_secret_in = clean_secret(data.get("gitlab_oauth_app_secret"))
+effective_gitlab_oauth_secret = gitlab_oauth_app_secret_in or secret_vars.get("GITLAB_OAUTH_APP_SECRET", "")
+gitlab_oauth_url = get_str("gitlab_oauth_url", "GITLAB_OAUTH_URL", "")
+
+# Google (google_oauth2)
+google_enabled = get_bool("google_enabled", "GOOGLE_ENABLED", False)
+google_label = get_str("google_label", "GOOGLE_LABEL", "Google", fallback_if_empty=True)
+google_client_id = get_str("google_client_id", "GOOGLE_CLIENT_ID", "")
+google_client_secret_in = clean_secret(data.get("google_client_secret"))
+effective_google_secret = google_client_secret_in or secret_vars.get("GOOGLE_CLIENT_SECRET", "")
+
+# Generic OAuth2 (oauth2_generic)
+oauth2_generic_enabled = get_bool("oauth2_generic_enabled", "OAUTH2_GENERIC_ENABLED", False)
+oauth2_generic_label = get_str("oauth2_generic_label", "OAUTH2_GENERIC_LABEL", "OAuth2", fallback_if_empty=True)
+oauth2_generic_app_id = get_str("oauth2_generic_app_id", "OAUTH2_GENERIC_APP_ID", "")
+oauth2_generic_app_secret_in = clean_secret(data.get("oauth2_generic_app_secret"))
+effective_oauth2_generic_secret = oauth2_generic_app_secret_in or secret_vars.get("OAUTH2_GENERIC_APP_SECRET", "")
+oauth2_generic_site = get_str("oauth2_generic_site", "OAUTH2_GENERIC_SITE", "")
+oauth2_generic_authorize_url = get_str(
+    "oauth2_generic_authorize_url",
+    "OAUTH2_GENERIC_AUTHORIZE_URL",
+    "/oauth2/v1/authorize",
+    fallback_if_empty=True,
+)
+oauth2_generic_token_url = get_str(
+    "oauth2_generic_token_url",
+    "OAUTH2_GENERIC_TOKEN_URL",
+    "/oauth2/v1/token",
+    fallback_if_empty=True,
+)
+oauth2_generic_user_info_url = get_str(
+    "oauth2_generic_user_info_url",
+    "OAUTH2_GENERIC_USER_INFO_URL",
+    "/oauth2/v1/userinfo",
+    fallback_if_empty=True,
+)
+oauth2_generic_uid_field = get_str(
+    "oauth2_generic_uid_field",
+    "OAUTH2_GENERIC_UID_FIELD",
+    "sub",
+    fallback_if_empty=True,
+)
+
+tcp_ports = [p.strip() for p in cur_env.get("TCP_PORTS", "").split(",") if p.strip()]
+server_port = tcp_ports[0] if len(tcp_ports) >= 1 else cur_env.get("GITLAB_NGINX_PORT", "20000")
+registry_port = tcp_ports[1] if len(tcp_ports) >= 2 else cur_env.get("GITLAB_REGISTRY_PORT", "20001")
+ssh_port = tcp_ports[2] if len(tcp_ports) >= 3 else cur_env.get("GITLAB_SSH_PORT", "20002")
+
+validation_errors = []
+
+
+def add_required_error(field_name, value=""):
+    validation_errors.append({
+        "field": field_name,
+        "parameter": field_name,
+        "value": value,
+        "error": "required_when_provider_enabled",
+    })
+
+
+if host and registry_host and host.lower() == registry_host.lower():
+    validation_errors.append({
+        "field": "registry_host",
+        "parameter": "registry_host",
+        "value": registry_host,
+        "error": "registry_host_must_differ_from_host",
+    })
+
+if (not cur_env.get("HOST") or host != cur_env.get("HOST")) and agent.http_route_in_use(domain=host):
+    validation_errors.append({
+        "field": "host",
+        "parameter": "host",
+        "value": host,
+        "error": "domain_already_used_in_traefik",
+    })
+
+if (
+    registry_host
+    and (not cur_env.get("GITLAB_REGISTRY_HOST") or registry_host != cur_env.get("GITLAB_REGISTRY_HOST"))
+    and agent.http_route_in_use(domain=registry_host)
+):
+    validation_errors.append({
+        "field": "registry_host",
+        "parameter": "registry_host",
+        "value": registry_host,
+        "error": "domain_already_used_in_traefik",
+    })
+
+if sso_enabled:
+    if ns8_sso_provider:
+        if not ldap_domain:
+            validation_errors.append({
+                "field": "ns8_sso_provider",
+                "parameter": "ns8_sso_provider",
+                "value": ns8_sso_provider,
+                "error": "ns8_sso_requires_ldap_domain",
+            })
+        else:
+            try:
+                rdb = agent.redis_connect(use_replica=True)
+                prov_info = rdb.hgetall(f"module/{ns8_sso_provider}/srv/http/oidc") or {}
+                prov_domain = str(prov_info.get("domain") or "").strip()
+                if prov_domain and prov_domain != ldap_domain:
+                    validation_errors.append({
+                        "field": "ns8_sso_provider",
+                        "parameter": "ns8_sso_provider",
+                        "value": ns8_sso_provider,
+                        "error": "ns8_sso_domain_mismatch",
+                    })
+            except Exception as ex:
+                print(
+                    agent.SD_WARNING + f"Failed to inspect OIDC provider '{ns8_sso_provider}' in Redis: {ex}",
+                    file=sys.stderr,
+                )
+
+    if oidc_enabled:
+        if not oidc_issuer:
+            add_required_error("oidc_issuer", oidc_issuer)
+        if not oidc_client_id:
+            add_required_error("oidc_client_id", oidc_client_id)
+        if not effective_oidc_secret:
+            add_required_error("oidc_client_secret", "")
+
+    if saml_enabled:
+        if not saml_idp_sso_target_url:
+            add_required_error("saml_idp_sso_target_url", saml_idp_sso_target_url)
+        if not saml_idp_cert_fingerprint and not effective_saml_cert_b64:
+            add_required_error("saml_idp_cert", "")
+
+    if azure_enabled:
+        if not azure_client_id:
+            add_required_error("azure_client_id", azure_client_id)
+        if not effective_azure_secret:
+            add_required_error("azure_client_secret", "")
+        if not azure_tenant_id:
+            add_required_error("azure_tenant_id", azure_tenant_id)
+
+    if github_enabled:
+        if not github_app_id:
+            add_required_error("github_app_id", github_app_id)
+        if not effective_github_secret:
+            add_required_error("github_app_secret", "")
+
+    if gitlab_oauth_enabled:
+        if not gitlab_oauth_app_id:
+            add_required_error("gitlab_oauth_app_id", gitlab_oauth_app_id)
+        if not effective_gitlab_oauth_secret:
+            add_required_error("gitlab_oauth_app_secret", "")
+
+    if google_enabled:
+        if not google_client_id:
+            add_required_error("google_client_id", google_client_id)
+        if not effective_google_secret:
+            add_required_error("google_client_secret", "")
+
+    if oauth2_generic_enabled:
+        if not oauth2_generic_app_id:
+            add_required_error("oauth2_generic_app_id", oauth2_generic_app_id)
+        if not effective_oauth2_generic_secret:
+            add_required_error("oauth2_generic_app_secret", "")
+        if not oauth2_generic_site:
+            add_required_error("oauth2_generic_site", oauth2_generic_site)
+
+if validation_errors:
+    agent.set_status("validation-failed")
+    json.dump(validation_errors, fp=sys.stdout)
+    sys.exit(2)
+
 if initial_password:
     secret_vars["GITLAB_INITIAL_PASSWORD"] = initial_password
 elif not secret_vars.get("GITLAB_INITIAL_PASSWORD"):
-    secret_vars["GITLAB_INITIAL_PASSWORD"] = os.environ.get("GITLAB_INITIAL_PASSWORD") or secrets.token_urlsafe(16)
+    secret_vars["GITLAB_INITIAL_PASSWORD"] = cur_env.get("GITLAB_INITIAL_PASSWORD") or secrets.token_urlsafe(16)
+
+if effective_custom_ca_b64:
+    secret_vars["CUSTOM_CA_CERT_B64"] = effective_custom_ca_b64
+else:
+    secret_vars.pop("CUSTOM_CA_CERT_B64", None)
+
+if effective_saml_cert_b64:
+    secret_vars["SAML_IDP_CERT_B64"] = effective_saml_cert_b64
+else:
+    secret_vars.pop("SAML_IDP_CERT_B64", None)
+
+for secret_key, secret_val in (
+    ("OIDC_CLIENT_SECRET", effective_oidc_secret),
+    ("AZURE_CLIENT_SECRET", effective_azure_secret),
+    ("GITHUB_APP_SECRET", effective_github_secret),
+    ("GITLAB_OAUTH_APP_SECRET", effective_gitlab_oauth_secret),
+    ("GOOGLE_CLIENT_SECRET", effective_google_secret),
+    ("OAUTH2_GENERIC_APP_SECRET", effective_oauth2_generic_secret),
+):
+    if secret_val:
+        secret_vars[secret_key] = secret_val
 
 agent.write_envfile(passwords_file, secret_vars)
 os.chmod(passwords_file, 0o600)
+
+custom_rb_path = "gitlab-custom.rb"
+if "custom_gitlab_rb" in data and data["custom_gitlab_rb"] is not None:
+    raw_custom_rb = str(data["custom_gitlab_rb"]).replace("\r\n", "\n").replace("\r", "\n")
+    if raw_custom_rb and not raw_custom_rb.endswith("\n"):
+        raw_custom_rb += "\n"
+    tmp_custom_rb = f".gitlab-custom.rb-{os.getpid()}.tmp"
+    with open(tmp_custom_rb, "w", encoding="utf-8", newline="\n") as cfile:
+        cfile.write(raw_custom_rb)
+    os.chmod(tmp_custom_rb, 0o600)
+    os.replace(tmp_custom_rb, custom_rb_path)
+elif not os.path.exists(custom_rb_path):
+    with open(custom_rb_path, "w", encoding="utf-8", newline="\n") as cfile:
+        cfile.write("")
+    os.chmod(custom_rb_path, 0o600)
+else:
+    os.chmod(custom_rb_path, 0o600)
 
 if "GITLAB_INITIAL_PASSWORD" in os.environ:
     agent.unset_env("GITLAB_INITIAL_PASSWORD")
@@ -86,4 +389,63 @@ agent.set_env("GITLAB_SSH_PORT", ssh_port)
 agent.set_env("LDAP_DOMAIN", ldap_domain)
 agent.set_env("GITLAB_REGISTRY_HOST", registry_host)
 agent.set_env("RUNNER_ENABLED", str(runner_enabled))
+
+agent.set_env("SSO_ENABLED", str(sso_enabled))
+agent.set_env("SSO_ALLOW_SINGLE_SIGN_ON", str(sso_allow_single_sign_on))
+agent.set_env("SSO_BLOCK_AUTO_CREATED_USERS", str(sso_block_auto_created_users))
+agent.set_env("SSO_ALLOW_BYPASS_TWO_FACTOR", str(sso_allow_bypass_two_factor))
+agent.set_env("SSO_AUTO_LINK_USER", str(sso_auto_link_user))
+agent.set_env("SSO_AUTO_LINK_LDAP_USER", str(sso_auto_link_ldap_user))
+agent.set_env("SSO_AUTO_LINK_SAML_USER", str(sso_auto_link_saml_user))
+agent.set_env("SSO_SYNC_PROFILE", str(sso_sync_profile))
+agent.set_env("SSO_AUTO_SIGN_IN_PROVIDER", sso_auto_sign_in_provider)
+
+agent.set_env("NS8_SSO_PROVIDER", ns8_sso_provider)
+agent.set_env("NS8_SSO_LABEL", ns8_sso_label)
+
+agent.set_env("OIDC_ENABLED", str(oidc_enabled))
+agent.set_env("OIDC_LABEL", oidc_label)
+agent.set_env("OIDC_ISSUER", oidc_issuer)
+agent.set_env("OIDC_CLIENT_ID", oidc_client_id)
+agent.set_env("OIDC_PKCE", str(oidc_pkce))
+agent.set_env("OIDC_UID_FIELD", oidc_uid_field)
+agent.set_env("OIDC_SCOPES", oidc_scopes)
+agent.set_env("OIDC_CLIENT_AUTH_METHOD", oidc_client_auth_method)
+
+agent.set_env("SAML_ENABLED", str(saml_enabled))
+agent.set_env("SAML_LABEL", saml_label)
+agent.set_env("SAML_IDP_SSO_TARGET_URL", saml_idp_sso_target_url)
+agent.set_env("SAML_IDP_SLO_TARGET_URL", saml_idp_slo_target_url)
+agent.set_env("SAML_ISSUER", saml_issuer)
+agent.set_env("SAML_IDP_CERT_FINGERPRINT", saml_idp_cert_fingerprint)
+agent.set_env("SAML_NAME_IDENTIFIER_FORMAT", saml_name_identifier_format)
+
+agent.set_env("AZURE_ENABLED", str(azure_enabled))
+agent.set_env("AZURE_LABEL", azure_label)
+agent.set_env("AZURE_CLIENT_ID", azure_client_id)
+agent.set_env("AZURE_TENANT_ID", azure_tenant_id)
+
+agent.set_env("GITHUB_ENABLED", str(github_enabled))
+agent.set_env("GITHUB_LABEL", github_label)
+agent.set_env("GITHUB_APP_ID", github_app_id)
+agent.set_env("GITHUB_URL", github_url)
+
+agent.set_env("GITLAB_OAUTH_ENABLED", str(gitlab_oauth_enabled))
+agent.set_env("GITLAB_OAUTH_LABEL", gitlab_oauth_label)
+agent.set_env("GITLAB_OAUTH_APP_ID", gitlab_oauth_app_id)
+agent.set_env("GITLAB_OAUTH_URL", gitlab_oauth_url)
+
+agent.set_env("GOOGLE_ENABLED", str(google_enabled))
+agent.set_env("GOOGLE_LABEL", google_label)
+agent.set_env("GOOGLE_CLIENT_ID", google_client_id)
+
+agent.set_env("OAUTH2_GENERIC_ENABLED", str(oauth2_generic_enabled))
+agent.set_env("OAUTH2_GENERIC_LABEL", oauth2_generic_label)
+agent.set_env("OAUTH2_GENERIC_APP_ID", oauth2_generic_app_id)
+agent.set_env("OAUTH2_GENERIC_SITE", oauth2_generic_site)
+agent.set_env("OAUTH2_GENERIC_AUTHORIZE_URL", oauth2_generic_authorize_url)
+agent.set_env("OAUTH2_GENERIC_TOKEN_URL", oauth2_generic_token_url)
+agent.set_env("OAUTH2_GENERIC_USER_INFO_URL", oauth2_generic_user_info_url)
+agent.set_env("OAUTH2_GENERIC_UID_FIELD", oauth2_generic_uid_field)
+
 agent.dump_env()

@@ -36,7 +36,7 @@ buildah add "${container}" imageroot /imageroot
 buildah add "${container}" ui/dist /ui
 # Setup the entrypoint, ask to reserve three TCP ports with the label and set a rootless container
 buildah config --entrypoint=/ \
-    --label="org.nethserver.authorizations=traefik@node:routeadm cluster:accountconsumer node:fwadm" \
+    --label="org.nethserver.authorizations=traefik@node:routeadm cluster:accountconsumer node:fwadm idp@any:clientadm lemonldapng@any:clientadm authentik@any:clientadm keycloak@any:clientadm zitadel@any:clientadm" \
     --label="org.nethserver.tcp-ports-demand=3" \
     --label="org.nethserver.rootfull=0" \
     --label="org.nethserver.min-core=3.0.0" \

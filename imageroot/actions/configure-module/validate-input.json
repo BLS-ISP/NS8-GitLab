@@ -69,6 +69,263 @@
             "type": "boolean",
             "title": "Enable GitLab Runner",
             "description": "Start and register an integrated GitLab Runner container"
+        },
+        "sso_enabled": {
+            "type": "boolean",
+            "description": "Enable Single Sign-On (OmniAuth) authentication"
+        },
+        "sso_allow_single_sign_on": {
+            "type": "boolean",
+            "description": "Allow automatic account creation on first SSO login"
+        },
+        "sso_block_auto_created_users": {
+            "type": "boolean",
+            "description": "Require administrator approval for auto-created SSO accounts"
+        },
+        "sso_allow_bypass_two_factor": {
+            "type": "boolean",
+            "description": "Allow SSO providers to bypass GitLab two-factor authentication"
+        },
+        "sso_auto_link_user": {
+            "type": "boolean",
+            "description": "Automatically link existing GitLab users with matching email addresses"
+        },
+        "sso_auto_link_ldap_user": {
+            "type": "boolean",
+            "description": "Automatically link SSO users with matching LDAP identities"
+        },
+        "sso_auto_link_saml_user": {
+            "type": "boolean",
+            "description": "Automatically link SSO users with matching SAML identities"
+        },
+        "sso_sync_profile": {
+            "type": "boolean",
+            "description": "Synchronize user name and email from SSO providers on sign-in"
+        },
+        "sso_auto_sign_in_provider": {
+            "type": "string",
+            "description": "Optional provider name to automatically redirect unauthenticated users to",
+            "enum": [
+                "",
+                "openid_connect_ns8",
+                "openid_connect",
+                "saml",
+                "azure_activedirectory_v2",
+                "github",
+                "gitlab",
+                "google_oauth2",
+                "oauth2_generic"
+            ]
+        },
+        "custom_ca_cert": {
+            "type": "string",
+            "description": "Optional PEM-encoded custom CA certificate bundle for internal/private IdPs"
+        },
+        "clear_custom_ca_cert": {
+            "type": "boolean",
+            "description": "Remove previously stored custom CA certificate"
+        },
+        "ns8_sso_provider": {
+            "type": "string",
+            "description": "NethServer 8 OIDC service provider module ID (e.g. idp1, lemonldapng1)"
+        },
+        "ns8_sso_label": {
+            "type": "string",
+            "description": "Sign-in button label for NS8 Cluster Single Sign-On"
+        },
+        "oidc_enabled": {
+            "type": "boolean",
+            "description": "Enable external OpenID Connect provider"
+        },
+        "oidc_label": {
+            "type": "string",
+            "description": "Sign-in button label for external OpenID Connect"
+        },
+        "oidc_issuer": {
+            "type": "string",
+            "description": "OpenID Connect issuer URL"
+        },
+        "oidc_client_id": {
+            "type": "string",
+            "description": "OpenID Connect client identifier"
+        },
+        "oidc_client_secret": {
+            "type": "string",
+            "description": "OpenID Connect client secret"
+        },
+        "oidc_pkce": {
+            "type": "boolean",
+            "description": "Enable Proof Key for Code Exchange (PKCE) for OpenID Connect"
+        },
+        "oidc_uid_field": {
+            "type": "string",
+            "description": "Claim used as user identifier (e.g. preferred_username, sub, email)"
+        },
+        "oidc_scopes": {
+            "type": "string",
+            "description": "Comma-separated OpenID Connect scopes"
+        },
+        "oidc_client_auth_method": {
+            "type": "string",
+            "description": "Token endpoint client authentication method",
+            "enum": [
+                "basic",
+                "query",
+                "jwt_bearer",
+                "mtls"
+            ]
+        },
+        "saml_enabled": {
+            "type": "boolean",
+            "description": "Enable SAML 2.0 provider"
+        },
+        "saml_label": {
+            "type": "string",
+            "description": "Sign-in button label for SAML 2.0"
+        },
+        "saml_idp_sso_target_url": {
+            "type": "string",
+            "description": "SAML 2.0 Identity Provider Single Sign-On URL"
+        },
+        "saml_idp_slo_target_url": {
+            "type": "string",
+            "description": "Optional SAML 2.0 Identity Provider Single Logout URL"
+        },
+        "saml_issuer": {
+            "type": "string",
+            "description": "SAML Service Provider Entity ID (defaults to https://<host>)"
+        },
+        "saml_idp_cert_fingerprint": {
+            "type": "string",
+            "description": "SHA-1 or SHA-256 fingerprint of the SAML IdP signing certificate"
+        },
+        "saml_idp_cert": {
+            "type": "string",
+            "description": "PEM-encoded SAML IdP X.509 signing certificate"
+        },
+        "clear_saml_idp_cert": {
+            "type": "boolean",
+            "description": "Remove previously stored SAML IdP PEM certificate"
+        },
+        "saml_name_identifier_format": {
+            "type": "string",
+            "description": "SAML NameID format URI"
+        },
+        "azure_enabled": {
+            "type": "boolean",
+            "description": "Enable Microsoft Entra ID (Azure AD v2) provider"
+        },
+        "azure_label": {
+            "type": "string",
+            "description": "Sign-in button label for Microsoft Entra ID"
+        },
+        "azure_client_id": {
+            "type": "string",
+            "description": "Microsoft Entra ID Application (client) ID"
+        },
+        "azure_client_secret": {
+            "type": "string",
+            "description": "Microsoft Entra ID client secret value"
+        },
+        "azure_tenant_id": {
+            "type": "string",
+            "description": "Microsoft Entra ID Directory (tenant) ID"
+        },
+        "github_enabled": {
+            "type": "boolean",
+            "description": "Enable GitHub / GitHub Enterprise OAuth provider"
+        },
+        "github_label": {
+            "type": "string",
+            "description": "Sign-in button label for GitHub"
+        },
+        "github_app_id": {
+            "type": "string",
+            "description": "GitHub OAuth App Client ID"
+        },
+        "github_app_secret": {
+            "type": "string",
+            "description": "GitHub OAuth App Client Secret"
+        },
+        "github_url": {
+            "type": "string",
+            "description": "Optional GitHub Enterprise URL"
+        },
+        "gitlab_oauth_enabled": {
+            "type": "boolean",
+            "description": "Enable GitLab.com / external GitLab OAuth provider"
+        },
+        "gitlab_oauth_label": {
+            "type": "string",
+            "description": "Sign-in button label for external GitLab"
+        },
+        "gitlab_oauth_app_id": {
+            "type": "string",
+            "description": "External GitLab OAuth Application ID"
+        },
+        "gitlab_oauth_app_secret": {
+            "type": "string",
+            "description": "External GitLab OAuth Application Secret"
+        },
+        "gitlab_oauth_url": {
+            "type": "string",
+            "description": "Optional external self-managed GitLab instance URL"
+        },
+        "google_enabled": {
+            "type": "boolean",
+            "description": "Enable Google Workspace / Google OAuth2 provider"
+        },
+        "google_label": {
+            "type": "string",
+            "description": "Sign-in button label for Google"
+        },
+        "google_client_id": {
+            "type": "string",
+            "description": "Google OAuth 2.0 Client ID"
+        },
+        "google_client_secret": {
+            "type": "string",
+            "description": "Google OAuth 2.0 Client Secret"
+        },
+        "oauth2_generic_enabled": {
+            "type": "boolean",
+            "description": "Enable Generic OAuth2 provider"
+        },
+        "oauth2_generic_label": {
+            "type": "string",
+            "description": "Sign-in button label for Generic OAuth2"
+        },
+        "oauth2_generic_app_id": {
+            "type": "string",
+            "description": "Generic OAuth2 Client ID"
+        },
+        "oauth2_generic_app_secret": {
+            "type": "string",
+            "description": "Generic OAuth2 Client Secret"
+        },
+        "oauth2_generic_site": {
+            "type": "string",
+            "description": "Generic OAuth2 provider base URL"
+        },
+        "oauth2_generic_authorize_url": {
+            "type": "string",
+            "description": "Generic OAuth2 authorization endpoint path or URL"
+        },
+        "oauth2_generic_token_url": {
+            "type": "string",
+            "description": "Generic OAuth2 token endpoint path or URL"
+        },
+        "oauth2_generic_user_info_url": {
+            "type": "string",
+            "description": "Generic OAuth2 userinfo endpoint path or URL"
+        },
+        "oauth2_generic_uid_field": {
+            "type": "string",
+            "description": "JSON field in userinfo response containing unique user ID"
+        },
+        "custom_gitlab_rb": {
+            "type": "string",
+            "description": "Custom GitLab Omnibus Ruby configuration persisted in /etc/gitlab/gitlab-custom.rb"
         }
     }
 }

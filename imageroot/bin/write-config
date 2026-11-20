@@ -5,6 +5,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 
+import base64
 import json
 import os
 import sys
@@ -15,6 +16,11 @@ from agent.ldapproxy import Ldapproxy
 def ruby_str(value):
     """Return a safely escaped Ruby string expression using JSON.parse."""
     return f"JSON.parse({json.dumps(json.dumps(str(value)))})"
+
+
+def ruby_json(value):
+    """Return a safely escaped Ruby object/array expression using JSON.parse."""
+    return f"JSON.parse({json.dumps(json.dumps(value))})"
 
 
 env = dict(os.environ)
@@ -30,6 +36,46 @@ if os.path.exists("passwords.env"):
         secret_vars.update(agent.read_envfile("passwords.env"))
     except Exception as ex:
         print(agent.SD_WARNING + f"Failed to read passwords.env file: {ex}", file=sys.stderr)
+
+# Ensure state/gitlab-custom.rb (mode 0600) always exists before podman bind-mounts it
+custom_rb_path = "gitlab-custom.rb"
+if not os.path.exists(custom_rb_path):
+    with open(custom_rb_path, "w", encoding="utf-8", newline="\n") as cfile:
+        cfile.write("")
+    os.chmod(custom_rb_path, 0o600)
+else:
+    os.chmod(custom_rb_path, 0o600)
+
+# Render or remove custom CA certificate (state/ns8-custom-ca.crt & state/trusted-certs/ns8-custom-ca.crt)
+os.makedirs("trusted-certs", mode=0o700, exist_ok=True)
+ca_cert_path = "ns8-custom-ca.crt"
+staged_ca_cert_path = os.path.join("trusted-certs", "ns8-custom-ca.crt")
+custom_ca_b64 = secret_vars.get("CUSTOM_CA_CERT_B64", "").strip()
+custom_ca_pem = ""
+if custom_ca_b64:
+    try:
+        custom_ca_pem = (
+            base64.b64decode(custom_ca_b64).decode("utf-8").replace("\r\n", "\n").replace("\r", "\n").strip()
+        )
+    except Exception as ex:
+        print(agent.SD_WARNING + f"Failed to decode CUSTOM_CA_CERT_B64: {ex}", file=sys.stderr)
+        custom_ca_pem = ""
+
+if custom_ca_pem:
+    ca_payload = custom_ca_pem + "\n"
+    for target_path in (ca_cert_path, staged_ca_cert_path):
+        tmp_ca = f".ca-{os.getpid()}.tmp"
+        with open(tmp_ca, "w", encoding="utf-8", newline="\n") as cafile:
+            cafile.write(ca_payload)
+        os.chmod(tmp_ca, 0o644)
+        os.replace(tmp_ca, target_path)
+else:
+    for target_path in (ca_cert_path, staged_ca_cert_path):
+        if os.path.exists(target_path):
+            try:
+                os.remove(target_path)
+            except Exception as ex:
+                print(agent.SD_WARNING + f"Failed to remove {target_path}: {ex}", file=sys.stderr)
 
 host = env.get("HOST", "gitlab.local")
 registry_url = env.get("GITLAB_REGISTRY_HOST", "")
@@ -138,7 +184,7 @@ if ldap_domain:
                 "# LDAP / Active Directory Authentication",
                 "gitlab_rails['ldap_enabled'] = true",
                 "gitlab_rails['prevent_ldap_sign_in'] = false",
-                f"gitlab_rails['ldap_servers'] = JSON.parse({json.dumps(json.dumps(ldap_servers))})",
+                f"gitlab_rails['ldap_servers'] = {ruby_json(ldap_servers)}",
             ])
         else:
             print(agent.SD_WARNING + f"LDAP domain '{ldap_domain}' not currently available in Ldapproxy", file=sys.stderr)
@@ -149,6 +195,246 @@ else:
         "",
         "gitlab_rails['ldap_enabled'] = false",
     ])
+
+sso_enabled = env.get("SSO_ENABLED", "False") == "True"
+omniauth_providers = []
+
+if sso_enabled:
+    # 1. NS8 Cluster SSO (openid_connect_ns8)
+    ns8_sso_provider = env.get("NS8_SSO_PROVIDER", "").strip()
+    ns8_sso_issuer = env.get("NS8_SSO_ISSUER", "").strip()
+    ns8_sso_client_id = env.get("NS8_SSO_CLIENT_ID", "").strip()
+    ns8_sso_client_secret = secret_vars.get("NS8_SSO_CLIENT_SECRET", "").strip()
+    if ns8_sso_provider and ns8_sso_issuer and ns8_sso_client_id and ns8_sso_client_secret:
+        omniauth_providers.append({
+            "name": "openid_connect_ns8",
+            "label": env.get("NS8_SSO_LABEL", "").strip() or "Single Sign-On",
+            "args": {
+                "name": "openid_connect_ns8",
+                "strategy_class": "OmniAuth::Strategies::OpenIDConnect",
+                "scope": ["openid", "profile", "email"],
+                "response_type": "code",
+                "issuer": ns8_sso_issuer,
+                "discovery": True,
+                "client_auth_method": "basic",
+                "uid_field": "preferred_username",
+                "send_scope_to_token_endpoint": False,
+                "pkce": True,
+                "client_options": {
+                    "identifier": ns8_sso_client_id,
+                    "secret": ns8_sso_client_secret,
+                    "redirect_uri": f"https://{host}/users/auth/openid_connect_ns8/callback",
+                },
+            },
+        })
+
+    # 2. External OpenID Connect (openid_connect)
+    oidc_issuer = env.get("OIDC_ISSUER", "").strip()
+    oidc_client_id = env.get("OIDC_CLIENT_ID", "").strip()
+    oidc_client_secret = secret_vars.get("OIDC_CLIENT_SECRET", "").strip()
+    if env.get("OIDC_ENABLED", "False") == "True" and oidc_issuer and oidc_client_id and oidc_client_secret:
+        oidc_scopes_raw = env.get("OIDC_SCOPES", "").strip() or "openid,profile,email"
+        oidc_scopes_list = [s.strip() for s in oidc_scopes_raw.replace(" ", ",").split(",") if s.strip()] or [
+            "openid",
+            "profile",
+            "email",
+        ]
+        omniauth_providers.append({
+            "name": "openid_connect",
+            "label": env.get("OIDC_LABEL", "").strip() or "OpenID Connect",
+            "args": {
+                "name": "openid_connect",
+                "strategy_class": "OmniAuth::Strategies::OpenIDConnect",
+                "scope": oidc_scopes_list,
+                "response_type": "code",
+                "issuer": oidc_issuer,
+                "discovery": True,
+                "client_auth_method": env.get("OIDC_CLIENT_AUTH_METHOD", "").strip() or "basic",
+                "uid_field": env.get("OIDC_UID_FIELD", "").strip() or "preferred_username",
+                "send_scope_to_token_endpoint": False,
+                "pkce": env.get("OIDC_PKCE", "True") == "True",
+                "client_options": {
+                    "identifier": oidc_client_id,
+                    "secret": oidc_client_secret,
+                    "redirect_uri": f"https://{host}/users/auth/openid_connect/callback",
+                },
+            },
+        })
+
+    # 3. SAML 2.0 (saml)
+    saml_idp_sso_target_url = env.get("SAML_IDP_SSO_TARGET_URL", "").strip()
+    saml_idp_slo_target_url = env.get("SAML_IDP_SLO_TARGET_URL", "").strip()
+    saml_idp_cert_fingerprint = env.get("SAML_IDP_CERT_FINGERPRINT", "").strip()
+    saml_cert_b64 = secret_vars.get("SAML_IDP_CERT_B64", "").strip()
+    saml_idp_cert_pem = ""
+    if saml_cert_b64:
+        try:
+            saml_idp_cert_pem = (
+                base64.b64decode(saml_cert_b64).decode("utf-8").replace("\r\n", "\n").replace("\r", "\n").strip()
+            )
+        except Exception as ex:
+            print(agent.SD_WARNING + f"Failed to decode SAML_IDP_CERT_B64: {ex}", file=sys.stderr)
+            saml_idp_cert_pem = ""
+    if (
+        env.get("SAML_ENABLED", "False") == "True"
+        and saml_idp_sso_target_url
+        and (saml_idp_cert_pem or saml_idp_cert_fingerprint)
+    ):
+        saml_args = {
+            "assertion_consumer_service_url": f"https://{host}/users/auth/saml/callback",
+            "idp_sso_target_url": saml_idp_sso_target_url,
+            "issuer": env.get("SAML_ISSUER", "").strip() or f"https://{host}",
+            "name_identifier_format": env.get("SAML_NAME_IDENTIFIER_FORMAT", "").strip()
+            or "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent",
+        }
+        if saml_idp_slo_target_url:
+            saml_args["idp_slo_target_url"] = saml_idp_slo_target_url
+        if saml_idp_cert_pem:
+            saml_args["idp_cert"] = saml_idp_cert_pem
+        elif saml_idp_cert_fingerprint:
+            saml_args["idp_cert_fingerprint"] = saml_idp_cert_fingerprint
+        omniauth_providers.append({
+            "name": "saml",
+            "label": env.get("SAML_LABEL", "").strip() or "SAML 2.0",
+            "args": saml_args,
+        })
+
+    # 4. Microsoft Entra ID (azure_activedirectory_v2)
+    azure_client_id = env.get("AZURE_CLIENT_ID", "").strip()
+    azure_client_secret = secret_vars.get("AZURE_CLIENT_SECRET", "").strip()
+    azure_tenant_id = env.get("AZURE_TENANT_ID", "").strip()
+    if (
+        env.get("AZURE_ENABLED", "False") == "True"
+        and azure_client_id
+        and azure_client_secret
+        and azure_tenant_id
+    ):
+        omniauth_providers.append({
+            "name": "azure_activedirectory_v2",
+            "label": env.get("AZURE_LABEL", "").strip() or "Microsoft Entra ID",
+            "args": {
+                "client_id": azure_client_id,
+                "client_secret": azure_client_secret,
+                "tenant_id": azure_tenant_id,
+            },
+        })
+
+    # 5. GitHub / GitHub Enterprise (github)
+    github_app_id = env.get("GITHUB_APP_ID", "").strip()
+    github_app_secret = secret_vars.get("GITHUB_APP_SECRET", "").strip()
+    github_url = env.get("GITHUB_URL", "").strip()
+    if env.get("GITHUB_ENABLED", "False") == "True" and github_app_id and github_app_secret:
+        github_entry = {
+            "name": "github",
+            "label": env.get("GITHUB_LABEL", "").strip() or "GitHub",
+            "app_id": github_app_id,
+            "app_secret": github_app_secret,
+            "args": {
+                "scope": "user:email",
+            },
+        }
+        if github_url:
+            github_entry["url"] = github_url
+        omniauth_providers.append(github_entry)
+
+    # 6. GitLab.com / External GitLab (gitlab)
+    gitlab_oauth_app_id = env.get("GITLAB_OAUTH_APP_ID", "").strip()
+    gitlab_oauth_app_secret = secret_vars.get("GITLAB_OAUTH_APP_SECRET", "").strip()
+    gitlab_oauth_url = env.get("GITLAB_OAUTH_URL", "").strip()
+    if (
+        env.get("GITLAB_OAUTH_ENABLED", "False") == "True"
+        and gitlab_oauth_app_id
+        and gitlab_oauth_app_secret
+    ):
+        gitlab_oauth_args = {"scope": "read_user"}
+        if gitlab_oauth_url:
+            gitlab_oauth_args["client_options"] = {"site": gitlab_oauth_url}
+        omniauth_providers.append({
+            "name": "gitlab",
+            "label": env.get("GITLAB_OAUTH_LABEL", "").strip() or "GitLab.com",
+            "app_id": gitlab_oauth_app_id,
+            "app_secret": gitlab_oauth_app_secret,
+            "args": gitlab_oauth_args,
+        })
+
+    # 7. Google Workspace / Google OAuth2 (google_oauth2)
+    google_client_id = env.get("GOOGLE_CLIENT_ID", "").strip()
+    google_client_secret = secret_vars.get("GOOGLE_CLIENT_SECRET", "").strip()
+    if env.get("GOOGLE_ENABLED", "False") == "True" and google_client_id and google_client_secret:
+        omniauth_providers.append({
+            "name": "google_oauth2",
+            "label": env.get("GOOGLE_LABEL", "").strip() or "Google",
+            "app_id": google_client_id,
+            "app_secret": google_client_secret,
+            "args": {
+                "access_type": "offline",
+                "approval_prompt": "",
+            },
+        })
+
+    # 8. Generic OAuth2 (oauth2_generic)
+    oauth2_generic_app_id = env.get("OAUTH2_GENERIC_APP_ID", "").strip()
+    oauth2_generic_app_secret = secret_vars.get("OAUTH2_GENERIC_APP_SECRET", "").strip()
+    oauth2_generic_site = env.get("OAUTH2_GENERIC_SITE", "").strip()
+    if (
+        env.get("OAUTH2_GENERIC_ENABLED", "False") == "True"
+        and oauth2_generic_app_id
+        and oauth2_generic_app_secret
+        and oauth2_generic_site
+    ):
+        omniauth_providers.append({
+            "name": "oauth2_generic",
+            "label": env.get("OAUTH2_GENERIC_LABEL", "").strip() or "OAuth2",
+            "app_id": oauth2_generic_app_id,
+            "app_secret": oauth2_generic_app_secret,
+            "args": {
+                "name": "oauth2_generic",
+                "strategy_class": "OmniAuth::Strategies::OAuth2Generic",
+                "client_options": {
+                    "site": oauth2_generic_site,
+                    "authorize_url": env.get("OAUTH2_GENERIC_AUTHORIZE_URL", "").strip() or "/oauth2/v1/authorize",
+                    "token_url": env.get("OAUTH2_GENERIC_TOKEN_URL", "").strip() or "/oauth2/v1/token",
+                    "user_info_url": env.get("OAUTH2_GENERIC_USER_INFO_URL", "").strip() or "/oauth2/v1/userinfo",
+                },
+                "user_response_structure": {
+                    "root_path": [],
+                    "id_path": [env.get("OAUTH2_GENERIC_UID_FIELD", "").strip() or "sub"],
+                    "attributes": {
+                        "email": "email",
+                        "name": "name",
+                    },
+                },
+            },
+        })
+
+if sso_enabled and omniauth_providers:
+    active_provider_names = [prov["name"] for prov in omniauth_providers]
+    sso_allow_sso = env.get("SSO_ALLOW_SINGLE_SIGN_ON", "True") == "True"
+    sso_block_auto = env.get("SSO_BLOCK_AUTO_CREATED_USERS", "False") == "True"
+    sso_bypass_2fa = env.get("SSO_ALLOW_BYPASS_TWO_FACTOR", "True") == "True"
+    sso_auto_link = env.get("SSO_AUTO_LINK_USER", "True") == "True"
+    sso_auto_link_ldap = env.get("SSO_AUTO_LINK_LDAP_USER", "True") == "True"
+    sso_auto_link_saml = env.get("SSO_AUTO_LINK_SAML_USER", "True") == "True"
+    sso_sync_profile = env.get("SSO_SYNC_PROFILE", "True") == "True"
+    sso_auto_sign_in = env.get("SSO_AUTO_SIGN_IN_PROVIDER", "").strip()
+
+    lines.extend([
+        "",
+        "# Single Sign-On (OmniAuth)",
+        "gitlab_rails['omniauth_enabled'] = true",
+        f"gitlab_rails['omniauth_allow_single_sign_on'] = {ruby_json(active_provider_names) if sso_allow_sso else 'false'}",
+        f"gitlab_rails['omniauth_block_auto_created_users'] = {'true' if sso_block_auto else 'false'}",
+        f"gitlab_rails['omniauth_allow_bypass_two_factor'] = {ruby_json(active_provider_names) if sso_bypass_2fa else 'false'}",
+        f"gitlab_rails['omniauth_auto_link_user'] = {ruby_json(active_provider_names) if sso_auto_link else 'false'}",
+        f"gitlab_rails['omniauth_auto_link_ldap_user'] = {'true' if sso_auto_link_ldap else 'false'}",
+        f"gitlab_rails['omniauth_auto_link_saml_user'] = {'true' if sso_auto_link_saml else 'false'}",
+        f"gitlab_rails['omniauth_sync_email_from_provider'] = {ruby_json(active_provider_names) if sso_sync_profile else 'false'}",
+        f"gitlab_rails['omniauth_sync_profile_from_provider'] = {ruby_json(active_provider_names) if sso_sync_profile else 'false'}",
+        f"gitlab_rails['omniauth_sync_profile_attributes'] = {ruby_json(['name', 'email'] if sso_sync_profile else [])}",
+    ])
+    if sso_auto_sign_in and sso_auto_sign_in in active_provider_names:
+        lines.append(f"gitlab_rails['omniauth_auto_sign_in_with_provider'] = {ruby_str(sso_auto_sign_in)}")
+    lines.append(f"gitlab_rails['omniauth_providers'] = {ruby_json(omniauth_providers)}")
 
 if smtp_settings.get("enabled"):
     smtp_host = smtp_settings.get("host", "")
@@ -186,6 +472,12 @@ else:
         "",
         "gitlab_rails['smtp_enable'] = false",
     ])
+
+lines.extend([
+    "",
+    "# Persistent Custom Omnibus Configuration",
+    'from_file "/etc/gitlab/gitlab-custom.rb" if File.exist?("/etc/gitlab/gitlab-custom.rb")',
+])
 
 file_path = "gitlab.rb"
 tmpfile = f".gitlab.rb-{os.getpid()}.tmp"
